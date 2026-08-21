@@ -218,17 +218,18 @@ async def button_handler(
     await query.answer()
 
     if query.data == "register":
-        await send_feature_with_image(query, "register.png", "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
+        await send_feature_with_image(query, "register.png", "📝  新人注册福利已上线，早注册早领取\n现在加入T1体育，即可享受：\n💰首存彩金加码\n🛡专属包赔活动\n⚽️ 热门赛事推荐\n🎯 竞猜互动奖励\n🎁 隐藏活动福利\n\n注册时务必填写邀请码：🔑 20001136\n🌐 注册地址：
+https://www.t1ty.top?agentId=20001136\n\n永久防失联导航网：https://jully.pw ")
     elif query.data == "newbie":
-        await send_feature_with_image(query, "newbie.png", "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
+        await send_feature_with_image(query, "newbie.png", "🎁  新人专属福利已开启！\n首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n 超多隐藏福利持续解锁中，提供账号立刻为你申请福利。")
     elif query.data == "checkin":
         await send_feature_with_image(query, "checkin.png", "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
     elif query.data == "deposit":
-        await send_feature_with_image(query, "deposit.png", "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
+        await send_feature_with_image(query, "deposit.png", "🚀 签到就能领，错过就是少拿！\n近3天内完成充值即可参与每日签到活动，每天都有福利可拿，累计签到还有额外惊喜奖励！🎁\n\n⏰ 每月1日重新累计，越早参与越划算！\n\n回复：签到\n即可马上给你领取福利")
     elif query.data == "invite":
-        await send_feature_with_image(query, "invite.png", "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
+        await send_feature_with_image(query, "invite.png", "👥 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️")
     elif query.data == "explore":
-        await send_feature_with_image(query, "explore.png", "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
+        await send_feature_with_image(query, "explore.png", "🗺 欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/Avior96Bot\n@Avior96Bot")
     elif query.data == "support":
         await send_feature_with_image(query, "support.png", "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
 
