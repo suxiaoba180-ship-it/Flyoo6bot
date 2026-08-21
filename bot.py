@@ -38,8 +38,7 @@ ACTIVE_GROUPS = set()
 AD_CONTENT = (
     "🌟 【热门推荐公告】 🌟\n\n"
     "欢迎来到我们的官方频道！\n"
-    "🔥 探索无敌秘境，尽享丰厚新人彩金与签到福利！\n"
-    "💰 注册平台即送好礼，首存更有超值加赠！\n\n"
+    "🔥 注册平台、新人彩金、签到与日存彩金火热进行中！\n\n"
     "请点击下方机器人菜单了解详情👇"
 )
 
@@ -47,6 +46,9 @@ AD_CONTENT = (
 # 文件所在目录
 # ==================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 如果你需要海报图片，可以放一张叫做 poster.png 在同级目录下，如果没有会纯发文字
+POSTER_IMAGE = os.path.join(BASE_DIR, "poster.png")
 
 ALIPAY_QR = os.path.join(BASE_DIR, "alipay.png")
 WECHAT_QR = os.path.join(BASE_DIR, "wechat.png")
@@ -56,26 +58,26 @@ USDT_AMOUNT = "10 USDT"
 USDT_NETWORK = "TRC20"
 
 # ============================================================
-# Telegram 左下角菜单
+# Telegram 左下角菜单 / 键盘布局
 # ============================================================
 
 async def setup_bot_commands(application):
     await application.bot.set_my_commands([
         BotCommand("start", "🏠 开始使用"),
-        BotCommand("explore", "🗺 探索秘境"),
         BotCommand("register", "📝 注册平台"),
         BotCommand("newbie", "🎁 新人彩金"),
-        BotCommand("invite", "👥 推荐好礼"),
         BotCommand("checkin", "📅 签到彩金"),
-        BotCommand("deposit", "💰 首存彩金"),
+        BotCommand("deposit", "💰 日存彩金"),
+        BotCommand("invite", "👥 推荐好礼"),
+        BotCommand("explore", "🗺 探索秘境"),
         BotCommand("support", "📞 联系客服"),
     ])
 
-# 底部固定键盘修改为指定功能
+# 底部固定键盘（按你要求的顺序：注册平台、新人彩金、签到彩金、日存彩金、推荐好礼、探索秘境 + 客服）
 MAIN_REPLY_KEYBOARD = [
-    ["🗺 探索秘境", "📝 注册平台"],
-    ["🎁 新人彩金", "👥 推荐好礼"],
-    ["📅 签到彩金", "💰 首存彩金"],
+    ["📝 注册平台", "🎁 新人彩金"],
+    ["📅 签到彩金", "💰 日存彩金"],
+    ["👥 推荐好礼", "🗺 探索秘境"],
     ["📞 联系客服"],
 ]
 
@@ -85,16 +87,83 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
     is_persistent=True,
 )
 
+# 聊天界面内嵌网格按钮（类似你提供的截图排版风格）
+def get_inline_keyboard():
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("📝 注册平台", callback_data="register"),
+            InlineKeyboardButton("🎁 新人彩金", callback_data="newbie")
+        ],
+        [
+            InlineKeyboardButton("📅 签到彩金", callback_data="checkin"),
+            InlineKeyboardButton("💰 日存彩金", callback_data="deposit")
+        ],
+        [
+            InlineKeyboardButton("👥 推荐好礼", callback_data="invite"),
+            InlineKeyboardButton("🗺 探索秘境", callback_data="explore")
+        ],
+        [
+            InlineKeyboardButton("📞 联系客服", callback_data="support")
+        ]
+    ])
+
+# ==================================================
+# 统一的图文发送助手（支持图片海报 + 文字 + 内嵌按钮）
+# ==================================================
+async def send_feature_message(update_or_query, text_content):
+    # 兼容 callback_query 和 message
+    if hasattr(update_or_query, "message") and update_or_query.message:
+        target_message = update_or_query.message
+    else:
+        target_message = update_or_query
+
+    # 如果存在海报文件 poster.png，则以图文海报形式发送
+    if os.path.exists(POSTER_IMAGE):
+        with open(POSTER_IMAGE, "rb") as photo:
+            try:
+                await target_message.reply_photo(
+                    photo=photo,
+                    caption=text_content,
+                    reply_markup=get_inline_keyboard()
+                )
+                return
+            except Exception:
+                pass
+    
+    # 如果没有海报或发送失败，则纯文字带内嵌键盘发送
+    await target_message.reply_text(
+        text=text_content,
+        reply_markup=get_inline_keyboard()
+    )
+
+
 # ==================================================
 # /start
 # ==================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("🔥 START 被调用了！")
-
+    welcome_text = (
+        "👋 欢迎来到平台！\n\n"
+        "🔥 请点击下方按钮或菜单栏选择您需要体验的服务："
+    )
+    # 发送带底部键盘、正文带内嵌按钮的消息
+    if os.path.exists(POSTER_IMAGE):
+        with open(POSTER_IMAGE, "rb") as photo:
+            await update.message.reply_photo(
+                photo=photo,
+                caption=welcome_text,
+                reply_markup=get_inline_keyboard()
+            )
+    else:
+        await update.message.reply_text(
+            text=welcome_text,
+            reply_markup=get_inline_keyboard()
+        )
+    
+    # 顺便展示底部键盘
     await update.message.reply_text(
-        "👋 欢迎光临！\n\n"
-        "请点击下方功能栏选择你需要的服务：",
-        reply_markup=MAIN_REPLY_MARKUP,
+        "👇 您也可以直接使用下方固定键盘：",
+        reply_markup=MAIN_REPLY_MARKUP
     )
 
 # ==================================================
@@ -140,7 +209,7 @@ async def admin_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==================================================
-# 按钮处理
+# 按钮（内联键盘）点击处理
 # ==================================================
 async def button_handler(
     update: Update,
@@ -150,20 +219,20 @@ async def button_handler(
     query = update.callback_query
     await query.answer()
 
-    if query.data == "explore":
-        await query.message.reply_text("🗺 【探索秘境】\n\n点击链接进入探索：https://t.me/your_channel_link")
-    elif query.data == "register":
-        await query.message.reply_text("📝 【注册平台】\n\n点击此处完成平台注册：https://t.me/your_channel_link")
+    if query.data == "register":
+        await send_feature_message(query, "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
     elif query.data == "newbie":
-        await query.message.reply_text("🎁 【新人彩金】\n\n新用户首次绑定即可领取丰厚新人彩金！详情请联系客服。")
-    elif query.data == "invite":
-        await query.message.reply_text("👥 【推荐好礼】\n\n邀请好友加入，即可享受多重推荐返利和好礼！")
+        await send_feature_message(query, "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
     elif query.data == "checkin":
-        await query.message.reply_text("📅 【签到彩金】\n\n每日坚持签到，天天领取签到彩金！")
+        await send_feature_message(query, "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
     elif query.data == "deposit":
-        await query.message.reply_text("💰 【首存彩金】\n\n首次充值立享超高比例首存彩金回馈！")
+        await send_feature_message(query, "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
+    elif query.data == "invite":
+        await send_feature_message(query, "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
+    elif query.data == "explore":
+        await send_feature_message(query, "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
     elif query.data == "support":
-        await query.message.reply_text("📞 【联系客服】\n\n如有任何疑问，请直接发送消息，客服会为您解答。")
+        await send_feature_message(query, "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
 
 
 # ============================================================
@@ -310,7 +379,7 @@ async def admin_reply_customer(
 
 
 # ==========================================
-# 底部固定菜单处理
+# 底部固定菜单（ReplyKeyboard）点击处理
 # ==========================================
 async def reply_keyboard_handler(
     update: Update,
@@ -318,20 +387,20 @@ async def reply_keyboard_handler(
 ):
     text = update.message.text
 
-    if text == "🗺 探索秘境":
-        await update.message.reply_text("🗺 【探索秘境】\n\n欢迎来到秘境探索，点击开始您的奇妙旅程！")
-    elif text == "📝 注册平台":
-        await update.message.reply_text("📝 【注册平台】\n\n请点击以下链接进行账号注册：https://t.me/your_channel_link")
+    if text == "📝 注册平台":
+        await send_feature_message(update, "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
     elif text == "🎁 新人彩金":
-        await update.message.reply_text("🎁 【新人彩金】\n\n新注册用户专享福利，完成新手任务即可领取新人彩金！")
-    elif text == "👥 推荐好礼":
-        await update.message.reply_text("👥 【推荐好礼】\n\n分享给好友，共同享受丰厚推荐好礼与奖励！")
+        await send_feature_message(update, "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
     elif text == "📅 签到彩金":
-        await update.message.reply_text("📅 【签到彩金】\n\n每日打卡签到，连续签到更有额外惊喜彩金！")
-    elif text == "💰 首存彩金":
-        await update.message.reply_text("💰 【首存彩金】\n\n首次充值尊享超值福利，多充多送！")
+        await send_feature_message(update, "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
+    elif text == "💰 日存彩金":
+        await send_feature_message(update, "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
+    elif text == "👥 推荐好礼":
+        await send_feature_message(update, "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
+    elif text == "🗺 探索秘境":
+        await send_feature_message(update, "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
     elif text == "📞 联系客服":
-        await update.message.reply_text("📞 【联系客服】\n\n如有任何问题，请直接发送内容，客服将为您解答。")
+        await send_feature_message(update, "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
 
 
 # ============================================================
@@ -340,7 +409,12 @@ async def reply_keyboard_handler(
 async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
     for chat_id in list(ACTIVE_GROUPS):
         try:
-            await context.bot.send_message(chat_id=chat_id, text=AD_CONTENT)
+            # 群发时如果也有海报，也可以带上海报或纯文字
+            if os.path.exists(POSTER_IMAGE):
+                with open(POSTER_IMAGE, "rb") as photo:
+                    await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=AD_CONTENT, reply_markup=get_inline_keyboard())
+            else:
+                await context.bot.send_message(chat_id=chat_id, text=AD_CONTENT, reply_markup=get_inline_keyboard())
         except Exception as e:
             print(f"❌ 向群组 {chat_id} 发送广告失败: {e}")
 
@@ -390,7 +464,7 @@ def main():
     app.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE
-            & filters.Regex(r"^(🗺 探索秘境|📝 注册平台|🎁 新人彩金|👥 推荐好礼|📅 签到彩金|💰 首存彩金|📞 联系客服)$"),
+            & filters.Regex(r"^(📝 注册平台|🎁 新人彩金|📅 签到彩金|💰 日存彩金|👥 推荐好礼|🗺 探索秘境|📞 联系客服)$"),
             reply_keyboard_handler
         )
     )
@@ -411,7 +485,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v4")
+    print("🤖 AvGood Bot 已启动... v5")
     print("等待用户发送 /start")
 
     import threading
