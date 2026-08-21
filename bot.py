@@ -27,9 +27,14 @@ ADMIN_ID = 7995750937
 # ==================================================
 # 客服群 ID（请确保这里是你的真实群 ID）
 # ==================================================
-SUPPORT_GROUP_ID = -1004349164935  # 如果之前修改过，请保持你正确的群 ID
+SUPPORT_GROUP_ID = -1004349164935 
 CUSTOMER_TOPICS = {}
 TOPIC_CUSTOMERS = {}
+
+# ==================================================
+# 客服锁定状态管理
+# ==================================================
+CUSTOMER_AGENTS = {}  # 记录 customer_id -> 当前接待的 admin_id
 
 # ==================================================
 # 定时群发广告配置
@@ -364,7 +369,50 @@ async def delete_notification_callback(context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==================================================
-# 客服系统：管理员回复群内话题 → 发送回客户私聊
+# 客服系统：管理员解除当前专属绑定命令 (/release)
+# ==================================================
+async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    message = update.effective_message
+    user = update.effective_user
+    chat = update.effective_chat
+
+    if not message or not user or not chat or chat.id != SUPPORT_GROUP_ID:
+        return
+
+    thread_id = message.message_thread_id
+    if not thread_id or thread_id not in TOPIC_CUSTOMERS:
+        await message.reply_text("❌ 请在具体的客户话题中使用此命令。")
+        return
+
+    customer_id = TOPIC_CUSTOMERS[thread_id]
+    current_agent = CUSTOMER_AGENTS.get(customer_id)
+
+    if current_agent is None:
+        await message.reply_text("ℹ️ 当前客户暂无绑定客服，所有人均可回复。")
+        return
+
+    # 允许本人或群管理员释放
+    if current_agent != user.id:
+        try:
+            member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
+            if member.status not in ("administrator", "creator"):
+                await message.reply_text("❌ 只有当前接待该客户的管理员或群管理员才能释放此话题。")
+                return
+        except Exception:
+            return
+
+    CUSTOMER_AGENTS.pop(customer_id, None)
+    sent_msg = await message.reply_text("🔓 已成功释放该客户！其他管理员现在可以接入回复了。")
+    if context.job_queue:
+        context.job_queue.run_once(
+            delete_notification_callback,
+            when=10,
+            data={"chat_id": chat.id, "message_id": sent_msg.message_id}
+        )
+
+
+# ==================================================
+# 客服系统：管理员回复群内话题 → 发送回客户私聊（带排他锁定）
 # ==================================================
 
 async def admin_reply_customer(
@@ -410,6 +458,25 @@ async def admin_reply_customer(
     if customer_id is None:
         return
 
+    # 检查排他锁定：如果该客户已经被其他管理员绑定，且当前说话的不是绑定者
+    assigned_agent = CUSTOMER_AGENTS.get(customer_id)
+    if assigned_agent and assigned_agent != user.id:
+        sent_err = await message.reply_text(
+            "❌ 该客户当前正由其他管理员接待中，您暂时无法回复。\n"
+            "💡 如需接管，请让原管理员在话题内发送 /release 解除绑定。"
+        )
+        if context.job_queue:
+            context.job_queue.run_once(
+                delete_notification_callback,
+                when=10,
+                data={"chat_id": chat.id, "message_id": sent_err.message_id}
+            )
+        return
+
+    # 首次回复，自动绑定给当前管理员
+    if not assigned_agent:
+        CUSTOMER_AGENTS[customer_id] = user.id
+
     try:
         if message.text:
             await context.bot.send_message(chat_id=customer_id, text=message.text)
@@ -419,7 +486,7 @@ async def admin_reply_customer(
         # 发送成功提示
         sent_msg = await message.reply_text("✅ 已发送给客户。")
         
-        # 10秒后自动删除这条提示消息
+        # 10秒后自动删除提示消息
         if context.job_queue:
             context.job_queue.run_once(
                 delete_notification_callback,
@@ -562,6 +629,9 @@ def main():
     app.add_handler(CommandHandler("admin", admin_test))
     app.add_handler(CommandHandler("groupid", groupid))
     
+    # 绑定释放客服的命令
+    app.add_handler(CommandHandler("release", release_customer))
+    
     app.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE
@@ -586,7 +656,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v10")
+    print("🤖 AvGood Bot 已启动... v11 (支持多管理员防抢单锁定)")
     print("等待用户发送 /start")
 
     import threading
