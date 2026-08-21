@@ -1,12 +1,11 @@
 import os
 import re
-import time
-import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ReplyKeyboardMarkup
 from telegram.ext import (
     Application,
+    CommandHandler,
     ContextTypes,
     CallbackQueryHandler,
     MessageHandler,
@@ -35,9 +34,7 @@ TOPIC_CUSTOMERS = {}
 # ==================================================
 # 定时群发广告配置
 # ==================================================
-# 存放需要自动发送广告的群组ID集合（机器人被拉入群后会自动收集，也可以手动在这里添加）
 ACTIVE_GROUPS = set()
-AD_INTERVAL = 3600  # 约1小时 (3600秒)
 AD_CONTENT = (
     "🌟 【热门推荐公告】 🌟\n\n"
     "欢迎来到我们的官方频道！\n"
@@ -69,7 +66,7 @@ async def setup_bot_commands(application):
         BotCommand("register", "📝 注册平台"),
         BotCommand("newbie", "🎁 新人彩金"),
         BotCommand("invite", "👥 推荐好礼"),
-        BotCommand("checkin", "签到彩金"),
+        BotCommand("checkin", "📅 签到彩金"),
         BotCommand("deposit", "💰 首存彩金"),
         BotCommand("support", "📞 联系客服"),
     ])
@@ -101,11 +98,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ==================================================
-# 获取当前群组 ID（临时使用）
+# 获取当前群组 ID
 # ==================================================
 async def groupid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
-    # 自动记录群组用于广告群发
     if chat.type in ["group", "supergroup"]:
         ACTIVE_GROUPS.add(chat.id)
 
@@ -157,15 +153,15 @@ async def button_handler(
     if query.data == "explore":
         await query.message.reply_text("🗺 【探索秘境】\n\n点击链接进入探索：https://t.me/your_channel_link")
     elif query.data == "register":
-        await query.message.reply_text("📝 【注册平台】\n\n点击此处完成平台注册：https://t.me/your_channel_link[cite: 1]")
+        await query.message.reply_text("📝 【注册平台】\n\n点击此处完成平台注册：https://t.me/your_channel_link")
     elif query.data == "newbie":
-        await query.message.reply_text("🎁 【新人彩金】\n\n新用户首次绑定即可领取丰厚新人彩金！详情请联系客服[cite: 1]。")
+        await query.message.reply_text("🎁 【新人彩金】\n\n新用户首次绑定即可领取丰厚新人彩金！详情请联系客服。")
     elif query.data == "invite":
-        await query.message.reply_text("👥 【推荐好礼】\n\n邀请好友加入，即可享受多重推荐返利和好礼！[cite: 1]")
+        await query.message.reply_text("👥 【推荐好礼】\n\n邀请好友加入，即可享受多重推荐返利和好礼！")
     elif query.data == "checkin":
-        await query.message.reply_text("📅 【签到彩金】\n\n每日坚持签到，天天领取签到彩金！[cite: 1]")
+        await query.message.reply_text("📅 【签到彩金】\n\n每日坚持签到，天天领取签到彩金！")
     elif query.data == "deposit":
-        await query.message.reply_text("💰 【首存彩金】\n\n首次充值立享超高比例首存彩金回馈！[cite: 1]")
+        await query.message.reply_text("💰 【首存彩金】\n\n首次充值立享超高比例首存彩金回馈！")
     elif query.data == "support":
         await query.message.reply_text("📞 【联系客服】\n\n如有任何疑问，请直接发送消息，客服会为您解答。")
 
@@ -184,12 +180,10 @@ async def forward_customer_message(
     if not message or not user:
         return
 
-    # 收集机器人所在的群组（用于定时广告）
     if update.effective_chat.type in ["group", "supergroup"]:
         ACTIVE_GROUPS.add(update.effective_chat.id)
         return
 
-    # 只处理客户私聊
     if update.effective_chat.type != "private":
         return
 
@@ -214,7 +208,7 @@ async def forward_customer_message(
                 chat_id=SUPPORT_GROUP_ID,
                 message_thread_id=topic.message_thread_id,
                 text=(
-                    "🆕 新客户咨询[cite: 1]\n\n"
+                    "🆕 新客户咨询\n\n"
                     f"👤 姓名：{user.full_name}\n"
                     f"🔹 用户名：{username}\n"
                     f"🆔 Telegram ID：{user.id}\n\n"
@@ -325,48 +319,30 @@ async def reply_keyboard_handler(
     text = update.message.text
 
     if text == "🗺 探索秘境":
-        await update.message.reply_text("🗺 【探索秘境】\n\n欢迎来到秘境探索，点击开始您的奇妙旅程[cite: 1]！")
+        await update.message.reply_text("🗺 【探索秘境】\n\n欢迎来到秘境探索，点击开始您的奇妙旅程！")
     elif text == "📝 注册平台":
-        await update.message.reply_text("📝 【注册平台】\n\n请点击以下链接进行账号注册：https://t.me/your_channel_link[cite: 1]")
+        await update.message.reply_text("📝 【注册平台】\n\n请点击以下链接进行账号注册：https://t.me/your_channel_link")
     elif text == "🎁 新人彩金":
-        await update.message.reply_text("🎁 【新人彩金】\n\n新注册用户专享福利，完成新手任务即可领取新人彩金[cite: 1]！")
+        await update.message.reply_text("🎁 【新人彩金】\n\n新注册用户专享福利，完成新手任务即可领取新人彩金！")
     elif text == "👥 推荐好礼":
-        await update.message.reply_text("👥 【推荐好礼】\n\n分享给好友，共同享受丰厚推荐好礼与奖励[cite: 1]！")
+        await update.message.reply_text("👥 【推荐好礼】\n\n分享给好友，共同享受丰厚推荐好礼与奖励！")
     elif text == "📅 签到彩金":
-        await update.message.reply_text("📅 【签到彩金】\n\n每日打卡签到，连续签到更有额外惊喜彩金[cite: 1]！")
+        await update.message.reply_text("📅 【签到彩金】\n\n每日打卡签到，连续签到更有额外惊喜彩金！")
     elif text == "💰 首存彩金":
-        await update.message.reply_text("💰 【首存彩金】\n\n首次充值尊享超值福利，多充多送[cite: 1]！")
+        await update.message.reply_text("💰 【首存彩金】\n\n首次充值尊享超值福利，多充多送！")
     elif text == "📞 联系客服":
         await update.message.reply_text("📞 【联系客服】\n\n如有任何问题，请直接发送内容，客服将为您解答。")
 
 
 # ============================================================
-# 定时群发广告后台任务
+# 定时群发广告任务（使用官方 JobQueue）
 # ============================================================
-def start_ad_loop(application):
-    def run():
-        # 等待 bot 启动稳定
-        time.sleep(10)
-        while True:
-            try:
-                # 每隔约1小时执行一次
-                time.sleep(AD_INTERVAL)
-                # 使用 application 提供的 bot 实例发送消息到已收集的群组
-                for chat_id in list(ACTIVE_GROUPS):
-                    try:
-                        # 在异步事件循环中安全调用发送
-                        import asyncio
-                        asyncio.run_coroutine_threadsafe(
-                            application.bot.send_message(chat_id=chat_id, text=AD_CONTENT),
-                            application.loop
-                        )
-                    except Exception as e:
-                        print(f"❌ 向群组 {chat_id} 发送广告失败: {e}")
-            except Exception as e:
-                print(f"❌ 广告群发线程异常: {e}")
-
-    t = threading.Thread(target=run, daemon=True)
-    t.start()
+async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
+    for chat_id in list(ACTIVE_GROUPS):
+        try:
+            await context.bot.send_message(chat_id=chat_id, text=AD_CONTENT)
+        except Exception as e:
+            print(f"❌ 向群组 {chat_id} 发送广告失败: {e}")
 
 
 # ============================================================
@@ -402,6 +378,10 @@ def main():
         .build()
     )
 
+    # 注册 1 小时（3600秒）循环一次的广告定时任务
+    if app.job_queue:
+        app.job_queue.run_repeating(send_scheduled_ads, interval=3600, first=60)
+
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("admin", admin_test))
@@ -431,12 +411,10 @@ def main():
         )
     )
 
-    # 启动群发广告后台线程
-    start_ad_loop(app)
-
-    print("🤖 AvGood Bot 已启动... v3")
+    print("🤖 AvGood Bot 已启动... v4")
     print("等待用户发送 /start")
 
+    import threading
     threading.Thread(target=start_health_server, daemon=True).start()
 
     app.run_polling(
