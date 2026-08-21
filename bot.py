@@ -38,15 +38,57 @@ CUSTOMER_AGENTS = {}  # 记录 customer_id -> 当前接待的 admin_id (int)
 CUSTOMER_AGENT_NAMES = {} # 记录 customer_id -> 管理员姓名
 
 # ==================================================
-# 定时群发广告配置
+# 定时群发广告配置（支持不同群发送不同的【文案】和【图片】）
 # ==================================================
-ACTIVE_GROUPS = {-100371994486, -1001150445713}
-AD_CONTENT = (
-    "🌟 【热门推荐公告】 🌟\n\n"
-    "欢迎来到我们的官方频道！\n"
-    "🔥 注册平台、新人彩金、签到与日存彩金火热进行中！\n\n"
-    "请点击下方机器人菜单了解详情👇"
-)
+GROUP_ADS = {
+    -100371994486: {
+        "text": (
+            "🌟 【群一专属公告】 🌟\n\n"
+            "这是针对第一个群聊定制的文案内容。\n"
+            "🔥 注册平台、新人彩金火热进行中！\n\n"
+            "请点击下方按钮了解详情👇"
+        ),
+        "image": "ad1.png"  # 第一个群专属的图片文件名
+    },
+    -1001150445713: {
+        "text": (
+            "🚀 【群二专属公告】 🚀\n\n"
+            "这是针对第二个群聊定制的完全不同的文案内容。\n"
+            "💰 每日首存与签到彩金火热派发中！\n\n"
+            "请点击下方按钮参与👇"
+        ),
+        "image": "ad2.png"  # 第二个群专属的图片文件名
+    },
+}
+
+ACTIVE_GROUPS = set(GROUP_ADS.keys())
+
+
+# ============================================================
+# 定时群发广告任务（图文完全独立版）
+# ============================================================
+async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
+    for chat_id, data in GROUP_ADS.items():
+        ad_text = data["text"]
+        ad_image_name = data["image"]
+        try:
+            ad_image_path = os.path.join(BASE_DIR, ad_image_name)
+            if os.path.exists(ad_image_path):
+                with open(ad_image_path, "rb") as photo:
+                    await context.bot.send_photo(
+                        chat_id=chat_id, 
+                        photo=photo, 
+                        caption=ad_text, 
+                        reply_markup=get_inline_keyboard()
+                    )
+            else:
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=ad_text, 
+                    reply_markup=get_inline_keyboard()
+                )
+        except Exception as e:
+            print(f"❌ 向群组 {chat_id} 发送广告失败: {e}")
 
 # ==================================================
 # 文件所在目录
@@ -670,17 +712,26 @@ async def admin_reply_customer(
 
 
 # ============================================================
-# 定时群发广告任务
+# 定时群发广告任务（多文案适配版）
 # ============================================================
 async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
-    for chat_id in list(ACTIVE_GROUPS):
+    for chat_id, ad_text in GROUP_ADS.items():
         try:
             ad_image = os.path.join(BASE_DIR, "ad.png")
             if os.path.exists(ad_image):
                 with open(ad_image, "rb") as photo:
-                    await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=AD_CONTENT, reply_markup=get_inline_keyboard())
+                    await context.bot.send_photo(
+                        chat_id=chat_id, 
+                        photo=photo, 
+                        caption=ad_text, 
+                        reply_markup=get_inline_keyboard()
+                    )
             else:
-                await context.bot.send_message(chat_id=chat_id, text=AD_CONTENT, reply_markup=get_inline_keyboard())
+                await context.bot.send_message(
+                    chat_id=chat_id, 
+                    text=ad_text, 
+                    reply_markup=get_inline_keyboard()
+                )
         except Exception as e:
             print(f"❌ 向群组 {chat_id} 发送广告失败: {e}")
 
