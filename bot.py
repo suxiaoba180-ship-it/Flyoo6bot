@@ -331,18 +331,7 @@ def get_support_control_keyboard(customer_id, current_agent_name=None):
 # 客服话题健康检查
 # ==================================================
 async def topic_exists(context: ContextTypes.DEFAULT_TYPE, topic_id):
-    try:
-        await context.bot.get_forum_topic(
-            chat_id=SUPPORT_GROUP_ID,
-            message_thread_id=topic_id,
-        )
-        return True
-    except BadRequest as e:
-        logger.warning("客服话题不存在或已删除 | topic_id=%s | %s", topic_id, e)
-        return False
-    except TelegramError as e:
-        log_exception("检查客服话题失败", e, chat_id=SUPPORT_GROUP_ID)
-        return True
+    return True
 
 
 # ==================================================
