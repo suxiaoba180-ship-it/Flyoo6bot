@@ -48,7 +48,7 @@ AD_CONTENT = (
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ============================================================
-# Telegram 左下角菜单 / 键盘布局
+# Telegram 左下角菜单 / 键盘布局（已去除联系客服）
 # ============================================================
 
 async def setup_bot_commands(application):
@@ -60,14 +60,12 @@ async def setup_bot_commands(application):
         BotCommand("deposit", "💰 日存彩金"),
         BotCommand("invite", "👥 推荐好礼"),
         BotCommand("explore", "🗺 探索秘境"),
-        BotCommand("support", "📞 联系客服"),
     ])
 
 MAIN_REPLY_KEYBOARD = [
     ["📝 注册平台", "🎁 新人彩金"],
     ["📅 签到彩金", "💰 日存彩金"],
     ["👥 推荐好礼", "🗺 探索秘境"],
-    ["📞 联系客服"],
 ]
 
 MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
@@ -76,7 +74,7 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
     is_persistent=True,
 )
 
-# 聊天界面内嵌网格按钮
+# 聊天界面内嵌网格按钮（已去除联系客服）
 def get_inline_keyboard():
     return InlineKeyboardMarkup([
         [
@@ -90,9 +88,6 @@ def get_inline_keyboard():
         [
             InlineKeyboardButton("👥 推荐好礼", callback_data="invite"),
             InlineKeyboardButton("🗺 探索秘境", callback_data="explore")
-        ],
-        [
-            InlineKeyboardButton("📞 联系客服", callback_data="support")
         ]
     ])
 
@@ -107,7 +102,6 @@ async def send_feature_with_image(update_or_query, image_filename, text_content)
 
     image_path = os.path.join(BASE_DIR, image_filename)
 
-    # 如果专属海报图片存在，则发送图文
     if os.path.exists(image_path):
         with open(image_path, "rb") as photo:
             try:
@@ -120,7 +114,6 @@ async def send_feature_with_image(update_or_query, image_filename, text_content)
             except Exception:
                 pass
     
-    # 如果没有找到对应图片，则降级为纯文字带按钮发送
     await target_message.reply_text(
         text=text_content,
         reply_markup=get_inline_keyboard()
@@ -134,7 +127,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print("🔥 START 被调用了！")
     welcome_text = (
         "👋 欢迎来到平台！\n\n"
-        "🔥 请点击下方按钮或菜单栏选择您需要体验的服务："
+        "🔥 请直接在对话框发送消息向客服咨询，或点击下方按钮选择您需要体验的服务："
     )
     
     start_image = os.path.join(BASE_DIR, "start.png")
@@ -211,7 +204,7 @@ async def button_handler(
 
     if query.data == "register":
         text = (
-            "🎉 福利已上线，早注册早领取！\n"
+            "【1. 注册平台】🎉 福利已上线，早注册早领取！\n"
             "现在加入T1体育，即可享受：\n\n"
             "💰 首存彩金加码\n"
             "🛡 专属包赔活动\n"
@@ -230,7 +223,7 @@ async def button_handler(
 
     elif query.data == "newbie":
         text = (
-            "🔥 新人专属福利已开启！\n\n"
+            "【2. 新人彩金】🔥 新人专属福利已开启！\n\n"
             "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
             "超多隐藏福利持续解锁中"
         )
@@ -238,7 +231,7 @@ async def button_handler(
 
     elif query.data == "checkin":
         text = (
-            "🚀 签到就能领，错过就是少拿！\n\n"
+            "【3. 签到彩金】🚀 签到就能领，错过就是少拿！\n\n"
             "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
             "⏰ 每月1日重新累计，越早参与越划算！\n\n"
             "回复：签到\n"
@@ -248,7 +241,7 @@ async def button_handler(
 
     elif query.data == "deposit":
         text = (
-            "🚀 今天的福利别漏领！\n\n"
+            "【4. 日存彩金】🚀 今天的福利别漏领！\n\n"
             "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
             "每天仅限领取一次，越早参与越划算！\n\n"
             "回复：每日首存\n"
@@ -258,7 +251,7 @@ async def button_handler(
 
     elif query.data == "invite":
         text = (
-            "🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
+            "【5. 推荐好礼】🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
             "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
             "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
         )
@@ -266,18 +259,15 @@ async def button_handler(
 
     elif query.data == "explore":
         text = (
-            "欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
+            "【6. 探索秘境】欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
             "https://t.me/Avior96Bot\n\n"
             "@Avior96Bot"
         )
         await send_feature_with_image(query, "explore.png", text)
 
-    elif query.data == "support":
-        await send_feature_with_image(query, "support.png", "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
-
 
 # ============================================================
-# 客服系统：客户 → 客服群独立话题
+# 客服系统：客户私聊消息 → 自动转发到群组独立话题
 # ============================================================
 
 async def forward_customer_message(
@@ -290,10 +280,12 @@ async def forward_customer_message(
     if not message or not user:
         return
 
+    # 如果是在群聊中，记录群聊 ID 用于广告群发，不当作私聊客户处理
     if update.effective_chat.type in ["group", "supergroup"]:
         ACTIVE_GROUPS.add(update.effective_chat.id)
         return
 
+    # 仅处理私聊
     if update.effective_chat.type != "private":
         return
 
@@ -303,6 +295,7 @@ async def forward_customer_message(
     username = f"@{user.username}" if user.username else "未设置"
     customer_id = user.id
 
+    # 如果该用户还没有在客服群创建专属话题，则为其创建一个新话题
     if customer_id not in CUSTOMER_TOPICS:
         try:
             topic_name = f"👤 {user.full_name}"
@@ -326,42 +319,46 @@ async def forward_customer_message(
                 )
             )
         except Exception as e:
-            print(f"❌ 创建客户话题失败：{e}")
+            print(f"❌ 创建客户话题失败（请检查机器人是否在群内且具有管理员权限）：{e}")
             return
 
     topic_id = CUSTOMER_TOPICS[customer_id]
 
-    if message.text:
-        text = (
-            "👤 客户咨询\n\n"
-            f"👤 姓名：{user.full_name}\n"
-            f"🔹 用户名：{username}\n"
-            f"🆔 Telegram ID：{user.id}\n\n"
-            "💬 客户消息：\n"
-            f"{message.text}"
-        )
-        await context.bot.send_message(
-            chat_id=SUPPORT_GROUP_ID,
-            message_thread_id=topic_id,
-            text=text
-        )
-    elif message.photo:
-        await context.bot.send_photo(
-            chat_id=SUPPORT_GROUP_ID,
-            message_thread_id=topic_id,
-            photo=message.photo[-1].file_id,
-            caption=f"👤 客户图片\nID: {user.id}"
-        )
-    else:
-        await context.bot.send_message(
-            chat_id=SUPPORT_GROUP_ID,
-            message_thread_id=topic_id,
-            text=f"👤 客户发送了消息 (ID: {user.id})"
-        )
+    # 转发用户的文字或图片到对应话题中
+    try:
+        if message.text:
+            text = (
+                "👤 客户咨询\n\n"
+                f"👤 姓名：{user.full_name}\n"
+                f"🔹 用户名：{username}\n"
+                f"🆔 Telegram ID：{user.id}\n\n"
+                "💬 客户消息：\n"
+                f"{message.text}"
+            )
+            await context.bot.send_message(
+                chat_id=SUPPORT_GROUP_ID,
+                message_thread_id=topic_id,
+                text=text
+            )
+        elif message.photo:
+            await context.bot.send_photo(
+                chat_id=SUPPORT_GROUP_ID,
+                message_thread_id=topic_id,
+                photo=message.photo[-1].file_id,
+                caption=f"👤 客户图片 (ID: {user.id})"
+            )
+        else:
+            await context.bot.send_message(
+                chat_id=SUPPORT_GROUP_ID,
+                message_thread_id=topic_id,
+                text=f"👤 客户发送了一条其他类型的消息 (ID: {user.id})"
+            )
+    except Exception as e:
+        print(f"❌ 转发客户消息到群组失败：{e}")
 
 
 # ==================================================
-# 客服系统：管理员回复 → 客户
+# 客服系统：管理员回复群内话题 → 发送回客户私聊
 # ==================================================
 
 async def admin_reply_customer(
@@ -420,7 +417,7 @@ async def admin_reply_customer(
 
 
 # ==========================================
-# 底部固定菜单（ReplyKeyboard）点击处理
+# 底部固定菜单（ReplyKeyboard）点击处理（已去除联系客服）
 # ==========================================
 async def reply_keyboard_handler(
     update: Update,
@@ -491,9 +488,6 @@ async def reply_keyboard_handler(
         )
         await send_feature_with_image(update, "explore.png", explore_text)
 
-    elif text == "📞 联系客服":
-        await send_feature_with_image(update, "support.png", "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
-
 
 # ============================================================
 # 定时群发广告任务（使用官方 JobQueue）
@@ -555,13 +549,14 @@ def main():
     app.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE
-            & filters.Regex(r"^(📝 注册平台|🎁 新人彩金|📅 签到彩金|💰 日存彩金|👥 推荐好礼|🗺 探索秘境|📞 联系客服)$"),
+            & filters.Regex(r"^(📝 注册平台|🎁 新人彩金|📅 签到彩金|💰 日存彩金|👥 推荐好礼|🗺 探索秘境)$"),
             reply_keyboard_handler
         )
     )
     
     app.add_handler(CallbackQueryHandler(button_handler))
 
+    # 监听私聊中除命令外的一切消息，并直接转发到客服群话题
     app.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE & ~filters.COMMAND,
@@ -569,6 +564,7 @@ def main():
         )
     )
 
+    # 监听客服群内的回复，自动转给对应用户
     app.add_handler(
         MessageHandler(
             filters.Chat(SUPPORT_GROUP_ID) & ~filters.COMMAND,
@@ -576,7 +572,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v8")
+    print("🤖 AvGood Bot 已启动... v9")
     print("等待用户发送 /start")
 
     import threading
