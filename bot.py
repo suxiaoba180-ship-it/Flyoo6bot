@@ -96,37 +96,51 @@ def get_inline_keyboard():
     ])
 
 # ==================================================
-# 核心公共函数：确保客户私聊时在群里有专属话题
+# 核心公共函数：确保客户私聊时在群里有专属话题（首次发送并置顶名片）
 # ==================================================
 async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
     customer_id = user.id
     username = f"@{user.username}" if user.username else "未设置"
 
-    if customer_id not in CUSTOMER_TOPICS:
-        try:
-            topic_name = f"👤 {user.full_name}"
-            topic = await context.bot.create_forum_topic(
-                chat_id=SUPPORT_GROUP_ID,
-                name=topic_name
-            )
+    # 如果该客户已经有专属话题了，直接返回话题 ID（后续消息不再重复发名片）
+    if customer_id in CUSTOMER_TOPICS:
+        return CUSTOMER_TOPICS[customer_id]
 
-            CUSTOMER_TOPICS[customer_id] = topic.message_thread_id
-            TOPIC_CUSTOMERS[topic.message_thread_id] = customer_id
-            
-            await context.bot.send_message(
-                chat_id=SUPPORT_GROUP_ID,
-                message_thread_id=topic.message_thread_id,
-                text=(
-                    "🆕 新客户咨询\n\n"
-                    f"👤 姓名：{user.full_name}\n"
-                    f"🔹 用户名：{username}\n"
-                    f"🆔 Telegram ID：{user.id}\n\n"
-                    "💬 客户消息："
-                )
+    try:
+        topic_name = f"👤 {user.full_name}"
+        topic = await context.bot.create_forum_topic(
+            chat_id=SUPPORT_GROUP_ID,
+            name=topic_name
+        )
+
+        CUSTOMER_TOPICS[customer_id] = topic.message_thread_id
+        TOPIC_CUSTOMERS[topic.message_thread_id] = customer_id
+        
+        # 第一次创建话题时，发送完整的客户名片信息
+        card_msg = await context.bot.send_message(
+            chat_id=SUPPORT_GROUP_ID,
+            message_thread_id=topic.message_thread_id,
+            text=(
+                "🆕 新客户咨询\n\n"
+                f"👤 姓名：{user.full_name}\n"
+                f"🔹 用户名：{username}\n"
+                f"🆔 Telegram ID：{user.id}\n\n"
+                "📌 【此客户名片已置顶，方便随时查看】"
             )
-        except Exception as e:
-            print(f"❌ 创建客户话题失败：{e}")
-            return None
+        )
+        
+        # 尝试置顶这条名片消息
+        try:
+            await context.bot.pin_chat_message(
+                chat_id=SUPPORT_GROUP_ID,
+                message_id=card_msg.message_id
+            )
+        except Exception:
+            pass
+
+    except Exception as e:
+        print(f"❌ 创建客户话题失败：{e}")
+        return None
     
     return CUSTOMER_TOPICS[customer_id]
 
@@ -140,14 +154,7 @@ async def notify_customer_action(context: ContextTypes.DEFAULT_TYPE, user, actio
     topic_id = await ensure_customer_topic(context, user)
     if topic_id:
         try:
-            username = f"@{user.username}" if user.username else "未设置"
-            text = (
-                "📌 客户行为通知\n\n"
-                f"👤 姓名：{user.full_name}\n"
-                f"🔹 用户名：{username}\n"
-                f"🆔 Telegram ID：{user.id}\n\n"
-                f"👆 客户点击了按钮：【 {action_name} 】"
-            )
+            text = f"👆 客户点击了按钮：【 {action_name} 】"
             await context.bot.send_message(
                 chat_id=SUPPORT_GROUP_ID,
                 message_thread_id=topic_id,
@@ -322,7 +329,7 @@ async def button_handler(
 
 
 # ============================================================
-# 客服系统：私聊统一消息分发（包含固定键盘点击与普通文本/图片）
+# 客服系统：私聊统一消息分发（后续消息纯净转发）
 # ============================================================
 async def handle_private_message(
     update: Update,
@@ -343,7 +350,6 @@ async def handle_private_message(
 
     text = message.text or ""
 
-    # 定义左下角固定键盘的完整文案映射
     keyboard_mapping = {
         "📝 注册平台": ("📝 注册平台", "register.png", (
             "【1. 注册平台】🎉 福利已上线，早注册早领取！\n"
@@ -395,45 +401,35 @@ async def handle_private_message(
     # 如果点击的是左下角固定菜单按钮
     if text in keyboard_mapping:
         name, img, content = keyboard_mapping[text]
-        # 先同步通知到专属话题
         await notify_customer_action(context, user, name)
-        # 再发送海报内容给客户
         await send_feature_content(message, img, content)
         return
 
-    # 否则，作为普通咨询消息转发到群聊话题
+    # 确保话题存在（如果是第一条消息会发置顶名片，后续直接获取话题ID）
     topic_id = await ensure_customer_topic(context, user)
     if not topic_id:
         return
 
-    username = f"@{user.username}" if user.username else "未设置"
+    # 后续消息：直接转发客户发的内容，不带繁琐前缀
     try:
         if message.text:
-            forward_text = (
-                "👤 客户咨询\n\n"
-                f"👤 姓名：{user.full_name}\n"
-                f"🔹 用户名：{username}\n"
-                f"🆔 Telegram ID：{user.id}\n\n"
-                "💬 客户消息：\n"
-                f"{message.text}"
-            )
             await context.bot.send_message(
                 chat_id=SUPPORT_GROUP_ID,
                 message_thread_id=topic_id,
-                text=forward_text
+                text=message.text
             )
         elif message.photo:
             await context.bot.send_photo(
                 chat_id=SUPPORT_GROUP_ID,
                 message_thread_id=topic_id,
                 photo=message.photo[-1].file_id,
-                caption=f"👤 客户图片 (ID: {user.id})"
+                caption=message.caption or ""
             )
         else:
             await context.bot.send_message(
                 chat_id=SUPPORT_GROUP_ID,
                 message_thread_id=topic_id,
-                text=f"👤 客户发送了一条其他类型的消息 (ID: {user.id})"
+                text="[客户发送了一条其他类型的消息]"
             )
     except Exception as e:
         print(f"❌ 转发客户消息到群组失败：{e}")
@@ -654,7 +650,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v14 (强制修正固定键盘通知逻辑)")
+    print("🤖 AvGood Bot 已启动... (已优化为首条消息置顶名片，后续消息纯净转发)")
     print("等待用户发送 /start")
 
     import threading
