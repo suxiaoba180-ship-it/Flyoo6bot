@@ -1,5 +1,6 @@
 import os
 import re
+import sqlite3
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ReplyKeyboardMarkup
@@ -28,14 +29,96 @@ ADMIN_ID = 7995750937
 # 客服群 ID（请确保这里是你的真实群 ID）
 # ==================================================
 SUPPORT_GROUP_ID = -1003749620184
-CUSTOMER_TOPICS = {}
-TOPIC_CUSTOMERS = {}
+# 客户话题与客服接待状态全部由 SQLite 持久化。
 
 # ==================================================
-# 客服锁定状态管理
+# 客服系统持久化数据库
 # ==================================================
-CUSTOMER_AGENTS = {}  # 记录 customer_id -> 当前接待的 admin_id (int)
-CUSTOMER_AGENT_NAMES = {} # 记录 customer_id -> 管理员姓名
+# Render 如果要在重启/重新部署后保留客服数据，请配置 Persistent Disk，并把 DB_PATH
+# 指向 Render Persistent Disk，例如 /var/data/bot_data.db。
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "bot_data.db"))
+
+def db_connect():
+    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA busy_timeout=30000")
+    return conn
+
+def init_db():
+    os.makedirs(os.path.dirname(DB_PATH) or ".", exist_ok=True)
+    with db_connect() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS customer_topics (
+                customer_id INTEGER PRIMARY KEY,
+                topic_id INTEGER NOT NULL UNIQUE
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS customer_agents (
+                customer_id INTEGER PRIMARY KEY,
+                agent_id INTEGER NOT NULL,
+                agent_name TEXT NOT NULL
+            )
+        """)
+        conn.commit()
+
+def get_customer_topic(customer_id):
+    with db_connect() as conn:
+        row = conn.execute(
+            "SELECT topic_id FROM customer_topics WHERE customer_id = ?",
+            (customer_id,)
+        ).fetchone()
+        return row["topic_id"] if row else None
+
+def save_customer_topic(customer_id, topic_id):
+    with db_connect() as conn:
+        conn.execute("""
+            INSERT INTO customer_topics(customer_id, topic_id)
+            VALUES(?, ?)
+            ON CONFLICT(customer_id) DO UPDATE SET topic_id=excluded.topic_id
+        """, (customer_id, topic_id))
+        conn.commit()
+
+def get_customer_by_topic(topic_id):
+    with db_connect() as conn:
+        row = conn.execute(
+            "SELECT customer_id FROM customer_topics WHERE topic_id = ?",
+            (topic_id,)
+        ).fetchone()
+        return row["customer_id"] if row else None
+
+def get_customer_agent(customer_id):
+    with db_connect() as conn:
+        row = conn.execute(
+            "SELECT agent_id, agent_name FROM customer_agents WHERE customer_id = ?",
+            (customer_id,)
+        ).fetchone()
+        if not row:
+            return None, None
+        return row["agent_id"], row["agent_name"]
+
+def save_customer_agent(customer_id, agent_id, agent_name):
+    with db_connect() as conn:
+        conn.execute("""
+            INSERT INTO customer_agents(customer_id, agent_id, agent_name)
+            VALUES(?, ?, ?)
+            ON CONFLICT(customer_id) DO UPDATE SET
+                agent_id=excluded.agent_id,
+                agent_name=excluded.agent_name
+        """, (customer_id, agent_id, agent_name))
+        conn.commit()
+
+def release_customer_agent_db(customer_id):
+    with db_connect() as conn:
+        conn.execute(
+            "DELETE FROM customer_agents WHERE customer_id = ?",
+            (customer_id,)
+        )
+        conn.commit()
+
+init_db()
 
 # ==================================================
 # 定时群发广告配置（支持不同群发送不同的【文案】和【图片】）
@@ -109,10 +192,6 @@ async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"❌ 向群组 {chat_id} 发送广告失败: {e}")
 
-# ==================================================
-# 文件所在目录
-# ==================================================
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ============================================================
 # Telegram 左下角菜单 / 键盘布局
@@ -176,8 +255,9 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
     customer_id = user.id
     username = f"@{user.username}" if user.username else "未设置"
 
-    if customer_id in CUSTOMER_TOPICS:
-        return CUSTOMER_TOPICS[customer_id]
+    existing_topic_id = get_customer_topic(customer_id)
+    if existing_topic_id:
+        return existing_topic_id
 
     try:
         topic_name = f"👤 {user.full_name}"
@@ -186,8 +266,7 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
             name=topic_name
         )
 
-        CUSTOMER_TOPICS[customer_id] = topic.message_thread_id
-        TOPIC_CUSTOMERS[topic.message_thread_id] = customer_id
+        save_customer_topic(customer_id, topic.message_thread_id)
         
         # 第一次创建话题时，发送完整的客户名片信息，并附带“点击接入”按钮
         card_msg = await context.bot.send_message(
@@ -216,7 +295,7 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
         print(f"❌ 创建客户话题失败：{e}")
         return None
     
-    return CUSTOMER_TOPICS[customer_id]
+    return get_customer_topic(customer_id)
 
 
 # ==================================================
@@ -299,6 +378,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # 获取当前群组 ID
 # ==================================================
 async def groupid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    if not user or user.id != ADMIN_ID:
+        await update.message.reply_text("❌ 你没有权限使用 /groupid。")
+        return
+
     chat = update.effective_chat
     if chat.type in ["group", "supergroup"]:
         ACTIVE_GROUPS.add(chat.id)
@@ -365,14 +449,13 @@ async def button_handler(
         customer_id = int(parts[2])
 
         if action == "take":
-            current_agent = CUSTOMER_AGENTS.get(customer_id)
+            current_agent, current_agent_name = get_customer_agent(customer_id)
             if current_agent and current_agent != user.id:
-                await query.answer(f"❌ 该客户已被 【{CUSTOMER_AGENT_NAMES.get(customer_id, '其他客服')}】 抢先接入！", show_alert=True)
+                await query.answer(f"❌ 该客户已被 【{current_agent_name or '其他客服'}】 抢先接入！", show_alert=True)
                 return
             
             # 成功接入
-            CUSTOMER_AGENTS[customer_id] = user.id
-            CUSTOMER_AGENT_NAMES[customer_id] = user.full_name
+            save_customer_agent(customer_id, user.id, user.full_name)
             await query.answer(f"✅ 成功接入客户 【{user.full_name}】！现在您可以回复他了。", show_alert=True)
             
             # 更新按钮状态
@@ -391,7 +474,7 @@ async def button_handler(
             )
 
         elif action == "release":
-            current_agent = CUSTOMER_AGENTS.get(customer_id)
+            current_agent, _ = get_customer_agent(customer_id)
             if current_agent != user.id:
                 try:
                     member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
@@ -402,8 +485,7 @@ async def button_handler(
                     await query.answer("❌ 无权操作", show_alert=True)
                     return
 
-            CUSTOMER_AGENTS.pop(customer_id, None)
-            CUSTOMER_AGENT_NAMES.pop(customer_id, None)
+            release_customer_agent_db(customer_id)
             await query.answer("🔓 已成功释放该客户，其他管理员可重新接入。", show_alert=True)
             
             # 还原按钮为“点击接入接待”
@@ -563,25 +645,14 @@ async def handle_private_message(
         return
 
     try:
-        if message.text:
-            await context.bot.send_message(
-                chat_id=SUPPORT_GROUP_ID,
-                message_thread_id=topic_id,
-                text=message.text
-            )
-        elif message.photo:
-            await context.bot.send_photo(
-                chat_id=SUPPORT_GROUP_ID,
-                message_thread_id=topic_id,
-                photo=message.photo[-1].file_id,
-                caption=message.caption or ""
-            )
-        else:
-            await context.bot.send_message(
-                chat_id=SUPPORT_GROUP_ID,
-                message_thread_id=topic_id,
-                text="[客户发送了一条其他类型的消息]"
-            )
+        # 使用 copy_message，统一支持文字、图片、语音、视频、文件、音频、
+        # 位置、联系人、GIF/动画、贴纸、视频消息等 Telegram 消息类型。
+        await context.bot.copy_message(
+            chat_id=SUPPORT_GROUP_ID,
+            from_chat_id=user.id,
+            message_id=message.message_id,
+            message_thread_id=topic_id
+        )
     except Exception as e:
         print(f"❌ 转发客户消息到群组失败：{e}")
 
@@ -611,12 +682,16 @@ async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     thread_id = message.message_thread_id
-    if not thread_id or thread_id not in TOPIC_CUSTOMERS:
+    if not thread_id:
         await message.reply_text("❌ 请在具体的客户话题中使用此命令。")
         return
 
-    customer_id = TOPIC_CUSTOMERS[thread_id]
-    current_agent = CUSTOMER_AGENTS.get(customer_id)
+    customer_id = get_customer_by_topic(thread_id)
+    if customer_id is None:
+        await message.reply_text("❌ 找不到该客户话题的记录，可能是旧话题或数据库数据异常。")
+        return
+
+    current_agent, _ = get_customer_agent(customer_id)
 
     if current_agent is None:
         await message.reply_text("ℹ️ 当前客户暂无绑定客服，所有人均可接入。")
@@ -631,8 +706,7 @@ async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             return
 
-    CUSTOMER_AGENTS.pop(customer_id, None)
-    CUSTOMER_AGENT_NAMES.pop(customer_id, None)
+    release_customer_agent_db(customer_id)
     
     sent_msg = await message.reply_text("🔓 已成功释放该客户！其他管理员现在可以点击按钮重新接入了。")
     if context.job_queue:
@@ -671,16 +745,16 @@ async def admin_reply_customer(
         return
 
     # 获取当前话题对应的客户 ID
-    customer_id = None
     thread_id = message.message_thread_id
-    if thread_id and thread_id in TOPIC_CUSTOMERS:
-        customer_id = TOPIC_CUSTOMERS[thread_id]
+    if not thread_id:
+        return
 
+    customer_id = get_customer_by_topic(thread_id)
     if customer_id is None:
         return
 
     # 检查该客户当前由谁接待
-    assigned_agent = CUSTOMER_AGENTS.get(customer_id)
+    assigned_agent, assigned_agent_name = get_customer_agent(customer_id)
 
     # 如果没有人点击接入，拦截并提示
     if assigned_agent is None:
@@ -698,7 +772,7 @@ async def admin_reply_customer(
 
     # 如果是其他人正在接待，拦截并提示
     if assigned_agent != user.id:
-        agent_name = CUSTOMER_AGENT_NAMES.get(customer_id, "其他客服")
+        agent_name = assigned_agent_name or "其他客服"
         sent_err = await message.reply_text(
             f"❌ 该客户当前正由管理员【 {agent_name} 】接待中，您无法回复。\n"
             "💡 如需接管，请让原管理员在话题内发送 /release 或点击释放按钮解除绑定。"
@@ -756,6 +830,9 @@ def start_health_server():
 # 主程序
 # ==================================================
 def main():
+    # 启动时再次确保数据库表存在。
+    init_db()
+
     app = (
         Application
         .builder()
@@ -765,7 +842,12 @@ def main():
     )
 
     if app.job_queue:
-        app.job_queue.run_repeating(send_scheduled_ads, interval=3600, first=60)
+        # 启动约 60 秒后发送第一轮，之后严格每 3600 秒（1 小时）发送一轮。
+        app.job_queue.run_repeating(
+            send_scheduled_ads,
+            interval=3600,
+            first=60
+        )
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("myid", myid))
@@ -784,7 +866,8 @@ def main():
         )
     )
 
-    # 客服群回复监听
+    # 客服群回复监听：不限制消息类型，文字/图片/语音/视频/文件/音频/
+    # 位置/联系人/GIF/动画/贴纸等都会进入 admin_reply_customer。
     app.add_handler(
         MessageHandler(
             filters.Chat(SUPPORT_GROUP_ID) & ~filters.COMMAND,
