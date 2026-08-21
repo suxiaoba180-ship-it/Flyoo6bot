@@ -732,31 +732,6 @@ async def admin_reply_customer(
 
 
 # ============================================================
-# 定时群发广告任务（多文案适配版）
-# ============================================================
-async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
-    for chat_id, ad_text in GROUP_ADS.items():
-        try:
-            ad_image = os.path.join(BASE_DIR, "ad.png")
-            if os.path.exists(ad_image):
-                with open(ad_image, "rb") as photo:
-                    await context.bot.send_photo(
-                        chat_id=chat_id, 
-                        photo=photo, 
-                        caption=ad_text, 
-                        reply_markup=get_inline_keyboard()
-                    )
-            else:
-                await context.bot.send_message(
-                    chat_id=chat_id, 
-                    text=ad_text, 
-                    reply_markup=get_inline_keyboard()
-                )
-        except Exception as e:
-            print(f"❌ 向群组 {chat_id} 发送广告失败: {e}")
-
-
-# ============================================================
 # Render 健康检查服务器
 # ============================================================
 class HealthHandler(BaseHTTPRequestHandler):
