@@ -790,7 +790,7 @@ def main():
     )
 
     if app.job_queue:
-        app.job_queue.run_repeating(send_scheduled_ads, interval=3600, first=60)
+        app.job_queue.run_repeating(send_scheduled_ads, interval=10, first=5)
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("myid", myid))
