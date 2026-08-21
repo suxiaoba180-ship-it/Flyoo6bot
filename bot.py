@@ -34,7 +34,8 @@ TOPIC_CUSTOMERS = {}
 # ==================================================
 # 客服锁定状态管理
 # ==================================================
-CUSTOMER_AGENTS = {}  # 记录 customer_id -> 当前接待的 admin_id
+CUSTOMER_AGENTS = {}  # 记录 customer_id -> 当前接待的 admin_id (int)
+CUSTOMER_AGENT_NAMES = {} # 记录 customer_id -> 管理员姓名
 
 # ==================================================
 # 定时群发广告配置
@@ -95,14 +96,25 @@ def get_inline_keyboard():
         ]
     ])
 
+# 生成接入工单的内联按钮
+def get_support_control_keyboard(customer_id, current_agent_name=None):
+    if current_agent_name:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton(f"🔒 已由 【{current_agent_name}】 接待", callback_data="none")],
+            [InlineKeyboardButton("🔓 释放/转交客户", callback_data=f"release_agent_{customer_id}")]
+        ])
+    else:
+        return InlineKeyboardMarkup([
+            [InlineKeyboardButton("📥 点击接入接待", callback_data=f"take_agent_{customer_id}")]
+        ])
+
 # ==================================================
-# 核心公共函数：确保客户私聊时在群里有专属话题（首次发送并置顶名片）
+# 核心公共函数：确保客户私聊时在群里有专属话题
 # ==================================================
 async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
     customer_id = user.id
     username = f"@{user.username}" if user.username else "未设置"
 
-    # 如果该客户已经有专属话题了，直接返回话题 ID（后续消息不再重复发名片）
     if customer_id in CUSTOMER_TOPICS:
         return CUSTOMER_TOPICS[customer_id]
 
@@ -116,7 +128,7 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
         CUSTOMER_TOPICS[customer_id] = topic.message_thread_id
         TOPIC_CUSTOMERS[topic.message_thread_id] = customer_id
         
-        # 第一次创建话题时，发送完整的客户名片信息
+        # 第一次创建话题时，发送完整的客户名片信息，并附带“点击接入”按钮
         card_msg = await context.bot.send_message(
             chat_id=SUPPORT_GROUP_ID,
             message_thread_id=topic.message_thread_id,
@@ -125,8 +137,9 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
                 f"👤 姓名：{user.full_name}\n"
                 f"🔹 用户名：{username}\n"
                 f"🆔 Telegram ID：{user.id}\n\n"
-                "📌 【此客户名片已置顶，方便随时查看】"
-            )
+                "📌 【此客户名片已置顶，请点击下方按钮抢单/接入】"
+            ),
+            reply_markup=get_support_control_keyboard(customer_id)
         )
         
         # 尝试置顶这条名片消息
@@ -264,7 +277,7 @@ async def admin_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==================================================
-# 按钮点击处理（内联网格按钮）
+# 按钮点击处理（包含客服接入/释放的内联按钮动作）
 # ==================================================
 async def button_handler(
     update: Update,
@@ -272,6 +285,85 @@ async def button_handler(
 ):
     query = update.callback_query
     user = query.from_user
+    data = query.data
+
+    # 处理客服在群里点击“接入”或“释放”按钮
+    if data.startswith("take_agent_") or data.startswith("release_agent_"):
+        # 验证是否为群管理员
+        try:
+            member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
+            if member.status not in ("administrator", "creator"):
+                await query.answer("❌ 只有群管理员才可以操作！", show_alert=True)
+                return
+        except Exception:
+            await query.answer("❌ 权限校验失败", show_alert=True)
+            return
+
+        parts = data.split("_")
+        action = parts[0]
+        customer_id = int(parts[2])
+
+        if action == "take":
+            current_agent = CUSTOMER_AGENTS.get(customer_id)
+            if current_agent and current_agent != user.id:
+                await query.answer(f"❌ 该客户已被 【{CUSTOMER_AGENT_NAMES.get(customer_id, '其他客服')}】 抢先接入！", show_alert=True)
+                return
+            
+            # 成功接入
+            CUSTOMER_AGENTS[customer_id] = user.id
+            CUSTOMER_AGENT_NAMES[customer_id] = user.full_name
+            await query.answer(f"✅ 成功接入客户 【{user.full_name}】！现在您可以回复他了。", show_alert=True)
+            
+            # 更新按钮状态
+            try:
+                await query.edit_message_reply_markup(
+                    reply_markup=get_support_control_keyboard(customer_id, user.full_name)
+                )
+            except Exception:
+                pass
+            
+            # 在话题里发个提示
+            await context.bot.send_message(
+                chat_id=SUPPORT_GROUP_ID,
+                message_thread_id=query.message.message_thread_id,
+                text=f"🔒 客服 **{user.full_name}** 已成功接入该对话。"
+            )
+
+        elif action == "release":
+            current_agent = CUSTOMER_AGENTS.get(customer_id)
+            if current_agent != user.id:
+                try:
+                    member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
+                    if member.status not in ("administrator", "creator"):
+                        await query.answer("❌ 只有当前接待该客服或超级管理员才能释放！", show_alert=True)
+                        return
+                except Exception:
+                    await query.answer("❌ 无权操作", show_alert=True)
+                    return
+
+            CUSTOMER_AGENTS.pop(customer_id, None)
+            CUSTOMER_AGENT_NAMES.pop(customer_id, None)
+            await query.answer("🔓 已成功释放该客户，其他管理员可重新接入。", show_alert=True)
+            
+            # 还原按钮为“点击接入接待”
+            try:
+                await query.edit_message_reply_markup(
+                    reply_markup=get_support_control_keyboard(customer_id)
+                )
+            except Exception:
+                pass
+
+            await context.bot.send_message(
+                chat_id=SUPPORT_GROUP_ID,
+                message_thread_id=query.message.message_thread_id,
+                text="🔓 该客户已被释放，其他管理员现在可以点击上方按钮接入了。"
+            )
+        return
+
+    if data == "none":
+        await query.answer("ℹ️ 此客户已有管理员正在接待中", show_alert=True)
+        return
+
     await query.answer()
 
     button_mapping = {
@@ -329,7 +421,7 @@ async def button_handler(
 
 
 # ============================================================
-# 客服系统：私聊统一消息分发（后续消息纯净转发）
+# 客服系统：私聊统一消息分发
 # ============================================================
 async def handle_private_message(
     update: Update,
@@ -398,19 +490,16 @@ async def handle_private_message(
         )),
     }
 
-    # 如果点击的是左下角固定菜单按钮
     if text in keyboard_mapping:
         name, img, content = keyboard_mapping[text]
         await notify_customer_action(context, user, name)
         await send_feature_content(message, img, content)
         return
 
-    # 确保话题存在（如果是第一条消息会发置顶名片，后续直接获取话题ID）
     topic_id = await ensure_customer_topic(context, user)
     if not topic_id:
         return
 
-    # 后续消息：直接转发客户发的内容，不带繁琐前缀
     try:
         if message.text:
             await context.bot.send_message(
@@ -468,7 +557,7 @@ async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     current_agent = CUSTOMER_AGENTS.get(customer_id)
 
     if current_agent is None:
-        await message.reply_text("ℹ️ 当前客户暂无绑定客服，所有人均可回复。")
+        await message.reply_text("ℹ️ 当前客户暂无绑定客服，所有人均可接入。")
         return
 
     if current_agent != user.id:
@@ -481,7 +570,9 @@ async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     CUSTOMER_AGENTS.pop(customer_id, None)
-    sent_msg = await message.reply_text("🔓 已成功释放该客户！其他管理员现在可以接入回复了。")
+    CUSTOMER_AGENT_NAMES.pop(customer_id, None)
+    
+    sent_msg = await message.reply_text("🔓 已成功释放该客户！其他管理员现在可以点击按钮重新接入了。")
     if context.job_queue:
         context.job_queue.run_once(
             delete_notification_callback,
@@ -491,7 +582,7 @@ async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==================================================
-# 客服系统：管理员回复群内话题 → 发送回客户私聊（带排他锁定）
+# 客服系统：管理员回复群内话题 → 严格限制必须先点击接入按钮
 # ==================================================
 async def admin_reply_customer(
     update: Update,
@@ -517,31 +608,23 @@ async def admin_reply_customer(
     except Exception:
         return
 
-    # 1. 尝试通过当前话题找到对应的客户 ID
+    # 获取当前话题对应的客户 ID
     customer_id = None
     thread_id = message.message_thread_id
     if thread_id and thread_id in TOPIC_CUSTOMERS:
         customer_id = TOPIC_CUSTOMERS[thread_id]
 
-    # 如果通过话题找不到，再尝试从回复的消息中提取
-    if customer_id is None and message.reply_to_message:
-        replied_message = message.reply_to_message
-        source_text = replied_message.text or replied_message.caption or ""
-        match = re.search(r"Telegram ID:\s*(\d+)", source_text)
-        if match:
-            customer_id = int(match.group(1))
-
     if customer_id is None:
         return
 
-    # 2. 检查当前客户的接待状态
+    # 检查该客户当前由谁接待
     assigned_agent = CUSTOMER_AGENTS.get(customer_id)
-    
-    # 如果已有其他管理员在接待，且不是当前说话的人，则拦截
-    if assigned_agent and assigned_agent != user.id:
+
+    # 如果没有人点击接入，拦截并提示
+    if assigned_agent is None:
         sent_err = await message.reply_text(
-            "❌ 该客户当前正由其他管理员接待中，您暂时无法回复。\n"
-            "💡 如需接管，请让原管理员在话题内发送 /release 解除绑定。"
+            "⚠️ 您尚未接入该客户！\n"
+            "💡 请先在上方名片消息中点击【 📥 点击接入接待 】按钮，才能与客户对话。"
         )
         if context.job_queue:
             context.job_queue.run_once(
@@ -551,9 +634,20 @@ async def admin_reply_customer(
             )
         return
 
-    # 如果还没人接待，或者当前说话的就是原管理员，则自动绑定/延续绑定
-    if not assigned_agent:
-        CUSTOMER_AGENTS[customer_id] = user.id
+    # 如果是其他人正在接待，拦截并提示
+    if assigned_agent != user.id:
+        agent_name = CUSTOMER_AGENT_NAMES.get(customer_id, "其他客服")
+        sent_err = await message.reply_text(
+            f"❌ 该客户当前正由管理员【 {agent_name} 】接待中，您无法回复。\n"
+            "💡 如需接管，请让原管理员在话题内发送 /release 或点击释放按钮解除绑定。"
+        )
+        if context.job_queue:
+            context.job_queue.run_once(
+                delete_notification_callback,
+                when=10,
+                data={"chat_id": chat.id, "message_id": sent_err.message_id}
+            )
+        return
 
     try:
         if message.text:
@@ -633,10 +727,10 @@ def main():
     app.add_handler(CommandHandler("groupid", groupid))
     app.add_handler(CommandHandler("release", release_customer))
     
-    # 内联网格按钮点击监听
+    # 按钮点击监听
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    # 统一私聊消息与左下角固定键盘点击监听
+    # 私聊消息监听
     app.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE & ~filters.COMMAND,
@@ -644,7 +738,7 @@ def main():
         )
     )
 
-    # 管理员在客服群的回复监听
+    # 客服群回复监听
     app.add_handler(
         MessageHandler(
             filters.Chat(SUPPORT_GROUP_ID) & ~filters.COMMAND,
@@ -652,7 +746,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... (已优化为首条消息置顶名片，后续消息纯净转发)")
+    print("🤖 AvGood Bot 已启动... (已实现【抢单接入按钮】专属客服工单制)")
     print("等待用户发送 /start")
 
     import threading
