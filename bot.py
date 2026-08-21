@@ -395,7 +395,9 @@ async def handle_private_message(
     # 如果点击的是左下角固定菜单按钮
     if text in keyboard_mapping:
         name, img, content = keyboard_mapping[text]
+        # 先同步通知到专属话题
         await notify_customer_action(context, user, name)
+        # 再发送海报内容给客户
         await send_feature_content(message, img, content)
         return
 
@@ -652,7 +654,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v13 (优化固定键盘同步逻辑)")
+    print("🤖 AvGood Bot 已启动... v14 (强制修正固定键盘通知逻辑)")
     print("等待用户发送 /start")
 
     import threading
