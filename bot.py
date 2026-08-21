@@ -25,9 +25,9 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_ID = 7995750937
 
 # ==================================================
-# 客服群 ID
+# 客服群 ID（请确保这里是你的真实群 ID）
 # ==================================================
-SUPPORT_GROUP_ID = -1003749620184
+SUPPORT_GROUP_ID = -1004349164935  # 如果之前修改过，请保持你正确的群 ID
 CUSTOMER_TOPICS = {}
 TOPIC_CUSTOMERS = {}
 
@@ -48,7 +48,7 @@ AD_CONTENT = (
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ============================================================
-# Telegram 左下角菜单 / 键盘布局（已去除联系客服）
+# Telegram 左下角菜单 / 键盘布局
 # ============================================================
 
 async def setup_bot_commands(application):
@@ -74,7 +74,6 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
     is_persistent=True,
 )
 
-# 聊天界面内嵌网格按钮（已去除联系客服）
 def get_inline_keyboard():
     return InlineKeyboardMarkup([
         [
@@ -124,7 +123,6 @@ async def send_feature_with_image(update_or_query, image_filename, text_content)
 # /start
 # ==================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("🔥 START 被调用了！")
     welcome_text = (
         "👋 欢迎来到平台！\n\n"
         "🔥 请直接在对话框发送消息向客服咨询，或点击下方按钮选择您需要体验的服务："
@@ -192,13 +190,12 @@ async def admin_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==================================================
-# 按钮（内联键盘）点击处理
+# 按钮点击处理
 # ==================================================
 async def button_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
-    print("🔥 BUTTON_HANDLER 被调用了！")
     query = update.callback_query
     await query.answer()
 
@@ -280,12 +277,10 @@ async def forward_customer_message(
     if not message or not user:
         return
 
-    # 如果是在群聊中，记录群聊 ID 用于广告群发，不当作私聊客户处理
     if update.effective_chat.type in ["group", "supergroup"]:
         ACTIVE_GROUPS.add(update.effective_chat.id)
         return
 
-    # 仅处理私聊
     if update.effective_chat.type != "private":
         return
 
@@ -295,7 +290,6 @@ async def forward_customer_message(
     username = f"@{user.username}" if user.username else "未设置"
     customer_id = user.id
 
-    # 如果该用户还没有在客服群创建专属话题，则为其创建一个新话题
     if customer_id not in CUSTOMER_TOPICS:
         try:
             topic_name = f"👤 {user.full_name}"
@@ -319,12 +313,11 @@ async def forward_customer_message(
                 )
             )
         except Exception as e:
-            print(f"❌ 创建客户话题失败（请检查机器人是否在群内且具有管理员权限）：{e}")
+            print(f"❌ 创建客户话题失败：{e}")
             return
 
     topic_id = CUSTOMER_TOPICS[customer_id]
 
-    # 转发用户的文字或图片到对应话题中
     try:
         if message.text:
             text = (
@@ -355,6 +348,19 @@ async def forward_customer_message(
             )
     except Exception as e:
         print(f"❌ 转发客户消息到群组失败：{e}")
+
+
+# ==================================================
+# 10秒后自动删除提示消息的内部函数
+# ==================================================
+async def delete_notification_callback(context: ContextTypes.DEFAULT_TYPE):
+    job_data = context.job.data
+    chat_id = job_data["chat_id"]
+    message_id = job_data["message_id"]
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+    except Exception:
+        pass
 
 
 # ==================================================
@@ -410,14 +416,24 @@ async def admin_reply_customer(
         elif message.photo:
             await context.bot.send_photo(chat_id=customer_id, photo=message.photo[-1].file_id, caption=message.caption)
         
-        await message.reply_text("✅ 已发送给客户。")
+        # 发送成功提示
+        sent_msg = await message.reply_text("✅ 已发送给客户。")
+        
+        # 10秒后自动删除这条提示消息
+        if context.job_queue:
+            context.job_queue.run_once(
+                delete_notification_callback,
+                when=10,
+                data={"chat_id": chat.id, "message_id": sent_msg.message_id}
+            )
+
     except Exception as e:
         print(f"❌ 客服回复失败：{e}")
         await message.reply_text("❌ 发送失败，用户可能屏蔽了机器人。")
 
 
 # ==========================================
-# 底部固定菜单（ReplyKeyboard）点击处理（已去除联系客服）
+# 底部固定菜单点击处理
 # ==========================================
 async def reply_keyboard_handler(
     update: Update,
@@ -490,7 +506,7 @@ async def reply_keyboard_handler(
 
 
 # ============================================================
-# 定时群发广告任务（使用官方 JobQueue）
+# 定时群发广告任务
 # ============================================================
 async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
     for chat_id in list(ACTIVE_GROUPS):
@@ -556,7 +572,6 @@ def main():
     
     app.add_handler(CallbackQueryHandler(button_handler))
 
-    # 监听私聊中除命令外的一切消息，并直接转发到客服群话题
     app.add_handler(
         MessageHandler(
             filters.ChatType.PRIVATE & ~filters.COMMAND,
@@ -564,7 +579,6 @@ def main():
         )
     )
 
-    # 监听客服群内的回复，自动转给对应用户
     app.add_handler(
         MessageHandler(
             filters.Chat(SUPPORT_GROUP_ID) & ~filters.COMMAND,
@@ -572,7 +586,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v9")
+    print("🤖 AvGood Bot 已启动... v10")
     print("等待用户发送 /start")
 
     import threading
