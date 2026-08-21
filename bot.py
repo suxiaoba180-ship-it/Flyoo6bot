@@ -47,9 +47,7 @@ AD_CONTENT = (
 # ==================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 如果你需要海报图片，可以放一张叫做 poster.png 在同级目录下，如果没有会纯发文字
-POSTER_IMAGE = os.path.join(BASE_DIR, "poster.png")
-
+# 各种支付二维码
 ALIPAY_QR = os.path.join(BASE_DIR, "alipay.png")
 WECHAT_QR = os.path.join(BASE_DIR, "wechat.png")
 USDT_QR = os.path.join(BASE_DIR, "usdt.png")
@@ -73,7 +71,6 @@ async def setup_bot_commands(application):
         BotCommand("support", "📞 联系客服"),
     ])
 
-# 底部固定键盘（按你要求的顺序：注册平台、新人彩金、签到彩金、日存彩金、推荐好礼、探索秘境 + 客服）
 MAIN_REPLY_KEYBOARD = [
     ["📝 注册平台", "🎁 新人彩金"],
     ["📅 签到彩金", "💰 日存彩金"],
@@ -87,7 +84,7 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
     is_persistent=True,
 )
 
-# 聊天界面内嵌网格按钮（类似你提供的截图排版风格）
+# 聊天界面内嵌网格按钮
 def get_inline_keyboard():
     return InlineKeyboardMarkup([
         [
@@ -108,18 +105,19 @@ def get_inline_keyboard():
     ])
 
 # ==================================================
-# 统一的图文发送助手（支持图片海报 + 文字 + 内嵌按钮）
+# 发送独立海报图文的通用函数
 # ==================================================
-async def send_feature_message(update_or_query, text_content):
-    # 兼容 callback_query 和 message
+async def send_feature_with_image(update_or_query, image_filename, text_content):
     if hasattr(update_or_query, "message") and update_or_query.message:
         target_message = update_or_query.message
     else:
         target_message = update_or_query
 
-    # 如果存在海报文件 poster.png，则以图文海报形式发送
-    if os.path.exists(POSTER_IMAGE):
-        with open(POSTER_IMAGE, "rb") as photo:
+    image_path = os.path.join(BASE_DIR, image_filename)
+
+    # 如果专属海报图片存在，则发送图文
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as photo:
             try:
                 await target_message.reply_photo(
                     photo=photo,
@@ -130,7 +128,7 @@ async def send_feature_message(update_or_query, text_content):
             except Exception:
                 pass
     
-    # 如果没有海报或发送失败，则纯文字带内嵌键盘发送
+    # 如果没有找到对应图片，则降级为纯文字带按钮发送
     await target_message.reply_text(
         text=text_content,
         reply_markup=get_inline_keyboard()
@@ -146,9 +144,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "👋 欢迎来到平台！\n\n"
         "🔥 请点击下方按钮或菜单栏选择您需要体验的服务："
     )
-    # 发送带底部键盘、正文带内嵌按钮的消息
-    if os.path.exists(POSTER_IMAGE):
-        with open(POSTER_IMAGE, "rb") as photo:
+    
+    start_image = os.path.join(BASE_DIR, "start.png")
+    if os.path.exists(start_image):
+        with open(start_image, "rb") as photo:
             await update.message.reply_photo(
                 photo=photo,
                 caption=welcome_text,
@@ -160,7 +159,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_inline_keyboard()
         )
     
-    # 顺便展示底部键盘
     await update.message.reply_text(
         "👇 您也可以直接使用下方固定键盘：",
         reply_markup=MAIN_REPLY_MARKUP
@@ -220,19 +218,19 @@ async def button_handler(
     await query.answer()
 
     if query.data == "register":
-        await send_feature_message(query, "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
+        await send_feature_with_image(query, "register.png", "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
     elif query.data == "newbie":
-        await send_feature_message(query, "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
+        await send_feature_with_image(query, "newbie.png", "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
     elif query.data == "checkin":
-        await send_feature_message(query, "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
+        await send_feature_with_image(query, "checkin.png", "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
     elif query.data == "deposit":
-        await send_feature_message(query, "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
+        await send_feature_with_image(query, "deposit.png", "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
     elif query.data == "invite":
-        await send_feature_message(query, "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
+        await send_feature_with_image(query, "invite.png", "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
     elif query.data == "explore":
-        await send_feature_message(query, "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
+        await send_feature_with_image(query, "explore.png", "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
     elif query.data == "support":
-        await send_feature_message(query, "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
+        await send_feature_with_image(query, "support.png", "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
 
 
 # ============================================================
@@ -388,19 +386,19 @@ async def reply_keyboard_handler(
     text = update.message.text
 
     if text == "📝 注册平台":
-        await send_feature_message(update, "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
+        await send_feature_with_image(update, "register.png", "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
     elif text == "🎁 新人彩金":
-        await send_feature_message(update, "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
+        await send_feature_with_image(update, "newbie.png", "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
     elif text == "📅 签到彩金":
-        await send_feature_message(update, "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
+        await send_feature_with_image(update, "checkin.png", "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
     elif text == "💰 日存彩金":
-        await send_feature_message(update, "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
+        await send_feature_with_image(update, "deposit.png", "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
     elif text == "👥 推荐好礼":
-        await send_feature_message(update, "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
+        await send_feature_with_image(update, "invite.png", "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
     elif text == "🗺 探索秘境":
-        await send_feature_message(update, "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
+        await send_feature_with_image(update, "explore.png", "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
     elif text == "📞 联系客服":
-        await send_feature_message(update, "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
+        await send_feature_with_image(update, "support.png", "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
 
 
 # ============================================================
@@ -409,9 +407,9 @@ async def reply_keyboard_handler(
 async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
     for chat_id in list(ACTIVE_GROUPS):
         try:
-            # 群发时如果也有海报，也可以带上海报或纯文字
-            if os.path.exists(POSTER_IMAGE):
-                with open(POSTER_IMAGE, "rb") as photo:
+            ad_image = os.path.join(BASE_DIR, "ad.png")
+            if os.path.exists(ad_image):
+                with open(ad_image, "rb") as photo:
                     await context.bot.send_photo(chat_id=chat_id, photo=photo, caption=AD_CONTENT, reply_markup=get_inline_keyboard())
             else:
                 await context.bot.send_message(chat_id=chat_id, text=AD_CONTENT, reply_markup=get_inline_keyboard())
@@ -452,7 +450,6 @@ def main():
         .build()
     )
 
-    # 注册 1 小时（3600秒）循环一次的广告定时任务
     if app.job_queue:
         app.job_queue.run_repeating(send_scheduled_ads, interval=3600, first=60)
 
@@ -485,7 +482,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v5")
+    print("🤖 AvGood Bot 已启动... v6")
     print("等待用户发送 /start")
 
     import threading
