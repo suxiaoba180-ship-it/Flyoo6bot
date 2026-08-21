@@ -96,13 +96,59 @@ def get_inline_keyboard():
     ])
 
 # ==================================================
-# 发送独立海报图文的通用函数
+# 核心公共函数：确保客户私聊时在群里有专属话题
 # ==================================================
-async def send_feature_with_image(update_or_query, image_filename, text_content):
+async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
+    customer_id = user.id
+    username = f"@{user.username}" if user.username else "未设置"
+
+    if customer_id not in CUSTOMER_TOPICS:
+        try:
+            topic_name = f"👤 {user.full_name}"
+            topic = await context.bot.create_forum_topic(
+                chat_id=SUPPORT_GROUP_ID,
+                name=topic_name
+            )
+
+            CUSTOMER_TOPICS[customer_id] = topic.message_thread_id
+            TOPIC_CUSTOMERS[topic.message_thread_id] = customer_id
+            
+            await context.bot.send_message(
+                chat_id=SUPPORT_GROUP_ID,
+                message_thread_id=topic.message_thread_id,
+                text=(
+                    "🆕 新客户咨询\n\n"
+                    f"👤 姓名：{user.full_name}\n"
+                    f"🔹 用户名：{username}\n"
+                    f"🆔 Telegram ID：{user.id}\n\n"
+                    "💬 客户消息："
+                )
+            )
+        except Exception as e:
+            print(f"❌ 创建客户话题失败：{e}")
+            return None
+    
+    return CUSTOMER_TOPICS[customer_id]
+
+
+# ==================================================
+# 发送独立海报图文的通用函数（同时同步转发动作到群内）
+# ==================================================
+async def send_feature_with_image(update_or_query, image_filename, text_content, button_display_name=""):
     if hasattr(update_or_query, "message") and update_or_query.message:
         target_message = update_or_query.message
+        user = update_or_query.from_user
+        context = update_or_query.application if hasattr(update_or_query, "application") else None
     else:
         target_message = update_or_query
+        user = target_message.from_user
+        context = None
+
+    # 如果有用户点击行为且名称有效，将其同步到客服群话题中
+    if user and button_display_name and not user.is_bot:
+        # 这里需要借助bot对象实例发送，通过全局对象或上下文传递
+        # 兼容处理上下文
+        pass
 
     image_path = os.path.join(BASE_DIR, image_filename)
 
@@ -122,6 +168,32 @@ async def send_feature_with_image(update_or_query, image_filename, text_content)
         text=text_content,
         reply_markup=get_inline_keyboard()
     )
+
+
+# ==================================================
+# 专用函数：将客户点击按钮的动作通知到对应话题
+# ==================================================
+async def notify_customer_action(context: ContextTypes.DEFAULT_TYPE, user, action_name):
+    if not user or user.is_bot:
+        return
+    topic_id = await ensure_customer_topic(context, user)
+    if topic_id:
+        try:
+            username = f"@{user.username}" if user.username else "未设置"
+            text = (
+                "📌 客户行为通知\n\n"
+                f"👤 姓名：{user.full_name}\n"
+                f"🔹 用户名：{username}\n"
+                f"🆔 Telegram ID：{user.id}\n\n"
+                f"👆 客户点击了按钮：【 {action_name} 】"
+            )
+            await context.bot.send_message(
+                chat_id=SUPPORT_GROUP_ID,
+                message_thread_id=topic_id,
+                text=text
+            )
+        except Exception as e:
+            print(f"❌ 同步客户按钮点击到群组失败：{e}")
 
 
 # ==================================================
@@ -195,17 +267,18 @@ async def admin_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ==================================================
-# 按钮点击处理
+# 按钮点击处理（内联网格按钮）
 # ==================================================
 async def button_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ):
     query = update.callback_query
+    user = query.from_user
     await query.answer()
 
-    if query.data == "register":
-        text = (
+    button_mapping = {
+        "register": ("📝 注册平台", "register.png", (
             "【1. 注册平台】🎉 福利已上线，早注册早领取！\n"
             "现在加入T1体育，即可享受：\n\n"
             "💰 首存彩金加码\n"
@@ -220,56 +293,48 @@ async def button_handler(
             "永久防失联地址：\n"
             "https://jully.pw\n\n"
             "注册完成后私讯我，即可领取专属福利礼包🎁"
-        )
-        await send_feature_with_image(query, "register.png", text)
-
-    elif query.data == "newbie":
-        text = (
+        )),
+        "newbie": ("🎁 新人彩金", "newbie.png", (
             "【2. 新人彩金】🔥 新人专属福利已开启！\n\n"
             "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
             "超多隐藏福利持续解锁中"
-        )
-        await send_feature_with_image(query, "newbie.png", text)
-
-    elif query.data == "checkin":
-        text = (
+        )),
+        "checkin": ("📅 签到彩金", "checkin.png", (
             "【3. 签到彩金】🚀 签到就能领，错过就是少拿！\n\n"
             "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
             "⏰ 每月1日重新累计，越早参与越划算！\n\n"
             "回复：签到\n"
             "即可马上为你申请福利"
-        )
-        await send_feature_with_image(query, "checkin.png", text)
-
-    elif query.data == "deposit":
-        text = (
+        )),
+        "deposit": ("💰 日存彩金", "deposit.png", (
             "【4. 日存彩金】🚀 今天的福利别漏领！\n\n"
             "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
             "每天仅限领取一次，越早参与越划算！\n\n"
             "回复：每日首存\n"
             "马上为你申请，无需额外操作🎁"
-        )
-        await send_feature_with_image(query, "deposit.png", text)
-
-    elif query.data == "invite":
-        text = (
+        )),
+        "invite": ("👥 推荐好礼", "invite.png", (
             "【5. 推荐好礼】🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
             "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
             "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
-        )
-        await send_feature_with_image(query, "invite.png", text)
-
-    elif query.data == "explore":
-        text = (
+        )),
+        "explore": ("🗺 探索秘境", "explore.png", (
             "【6. 探索秘境】欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
             "https://t.me/Avior96Bot\n\n"
             "@Avior96Bot"
-        )
-        await send_feature_with_image(query, "explore.png", text)
+        )),
+    }
+
+    if query.data in button_mapping:
+        name, img, text = button_mapping[query.data]
+        # 同步通知群内管理员
+        await notify_customer_action(context, user, name)
+        # 发送对应内容给用户
+        await send_feature_with_image(query, img, text)
 
 
 # ============================================================
-# 客服系统：客户私聊消息 → 自动转发到群组独立话题
+# 客服系统：客户私聊普通消息 → 自动转发到群组独立话题
 # ============================================================
 
 async def forward_customer_message(
@@ -293,35 +358,9 @@ async def forward_customer_message(
         return
 
     username = f"@{user.username}" if user.username else "未设置"
-    customer_id = user.id
-
-    if customer_id not in CUSTOMER_TOPICS:
-        try:
-            topic_name = f"👤 {user.full_name}"
-            topic = await context.bot.create_forum_topic(
-                chat_id=SUPPORT_GROUP_ID,
-                name=topic_name
-            )
-
-            CUSTOMER_TOPICS[customer_id] = topic.message_thread_id
-            TOPIC_CUSTOMERS[topic.message_thread_id] = customer_id
-            
-            await context.bot.send_message(
-                chat_id=SUPPORT_GROUP_ID,
-                message_thread_id=topic.message_thread_id,
-                text=(
-                    "🆕 新客户咨询\n\n"
-                    f"👤 姓名：{user.full_name}\n"
-                    f"🔹 用户名：{username}\n"
-                    f"🆔 Telegram ID：{user.id}\n\n"
-                    "💬 客户消息："
-                )
-            )
-        except Exception as e:
-            print(f"❌ 创建客户话题失败：{e}")
-            return
-
-    topic_id = CUSTOMER_TOPICS[customer_id]
+    topic_id = await ensure_customer_topic(context, user)
+    if not topic_id:
+        return
 
     try:
         if message.text:
@@ -391,7 +430,6 @@ async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await message.reply_text("ℹ️ 当前客户暂无绑定客服，所有人均可回复。")
         return
 
-    # 允许本人或群管理员释放
     if current_agent != user.id:
         try:
             member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
@@ -458,7 +496,6 @@ async def admin_reply_customer(
     if customer_id is None:
         return
 
-    # 检查排他锁定：如果该客户已经被其他管理员绑定，且当前说话的不是绑定者
     assigned_agent = CUSTOMER_AGENTS.get(customer_id)
     if assigned_agent and assigned_agent != user.id:
         sent_err = await message.reply_text(
@@ -473,7 +510,6 @@ async def admin_reply_customer(
             )
         return
 
-    # 首次回复，自动绑定给当前管理员
     if not assigned_agent:
         CUSTOMER_AGENTS[customer_id] = user.id
 
@@ -483,10 +519,8 @@ async def admin_reply_customer(
         elif message.photo:
             await context.bot.send_photo(chat_id=customer_id, photo=message.photo[-1].file_id, caption=message.caption)
         
-        # 发送成功提示
         sent_msg = await message.reply_text("✅ 已发送给客户。")
         
-        # 10秒后自动删除提示消息
         if context.job_queue:
             context.job_queue.run_once(
                 delete_notification_callback,
@@ -500,16 +534,17 @@ async def admin_reply_customer(
 
 
 # ==========================================
-# 底部固定菜单点击处理
+# 底部固定菜单点击处理（同步转发给群内）
 # ==========================================
 async def reply_keyboard_handler(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
 ):
     text = update.message.text
+    user = update.effective_user
 
-    if text == "📝 注册平台":
-        reg_text = (
+    keyboard_mapping = {
+        "📝 注册平台": ("📝 注册平台", "register.png", (
             "【1. 注册平台】🎉 福利已上线，早注册早领取！\n"
             "现在加入T1体育，即可享受：\n\n"
             "💰 首存彩金加码\n"
@@ -524,52 +559,44 @@ async def reply_keyboard_handler(
             "永久防失联地址：\n"
             "https://jully.pw\n\n"
             "注册完成后私讯我，即可领取专属福利礼包🎁"
-        )
-        await send_feature_with_image(update, "register.png", reg_text)
-
-    elif text == "🎁 新人彩金":
-        newbie_text = (
+        )),
+        "🎁 新人彩金": ("🎁 新人彩金", "newbie.png", (
             "【2. 新人彩金】🔥 新人专属福利已开启！\n\n"
             "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
             "超多隐藏福利持续解锁中"
-        )
-        await send_feature_with_image(update, "newbie.png", newbie_text)
-
-    elif text == "📅 签到彩金":
-        checkin_text = (
+        )),
+        "📅 签到彩金": ("📅 签到彩金", "checkin.png", (
             "【3. 签到彩金】🚀 签到就能领，错过就是少拿！\n\n"
             "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
             "⏰ 每月1日重新累计，越早参与越划算！\n\n"
             "回复：签到\n"
             "即可马上为你申请福利"
-        )
-        await send_feature_with_image(update, "checkin.png", checkin_text)
-
-    elif text == "💰 日存彩金":
-        deposit_text = (
+        )),
+        "💰 日存彩金": ("💰 日存彩金", "deposit.png", (
             "【4. 日存彩金】🚀 今天的福利别漏领！\n\n"
             "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
             "每天仅限领取一次，越早参与越划算！\n\n"
             "回复：每日首存\n"
             "马上为你申请，无需额外操作🎁"
-        )
-        await send_feature_with_image(update, "deposit.png", deposit_text)
-
-    elif text == "👥 推荐好礼":
-        invite_text = (
+        )),
+        "👥 推荐好礼": ("👥 推荐好礼", "invite.png", (
             "【5. 推荐好礼】🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
             "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
             "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
-        )
-        await send_feature_with_image(update, "invite.png", invite_text)
-
-    elif text == "🗺 探索秘境":
-        explore_text = (
+        )),
+        "🗺 探索秘境": ("🗺 探索秘境", "explore.png", (
             "【6. 探索秘境】欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
             "https://t.me/Avior96Bot\n\n"
             "@Avior96Bot"
-        )
-        await send_feature_with_image(update, "explore.png", explore_text)
+        )),
+    }
+
+    if text in keyboard_mapping:
+        name, img, content = keyboard_mapping[text]
+        # 同步通知群内管理员
+        await notify_customer_action(context, user, name)
+        # 发送对应内容给用户
+        await send_feature_with_image(update, img, content)
 
 
 # ============================================================
@@ -628,8 +655,6 @@ def main():
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("admin", admin_test))
     app.add_handler(CommandHandler("groupid", groupid))
-    
-    # 绑定释放客服的命令
     app.add_handler(CommandHandler("release", release_customer))
     
     app.add_handler(
@@ -656,7 +681,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v11 (支持多管理员防抢单锁定)")
+    print("🤖 AvGood Bot 已启动... v12 (支持按钮行为同步转发)")
     print("等待用户发送 /start")
 
     import threading
