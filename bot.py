@@ -211,7 +211,7 @@ async def button_handler(
 
     if query.data == "register":
         text = (
-            "【1. 注册平台】🎉 福利已上线，早注册早领取！\n"
+            "🎉 福利已上线，早注册早领取！\n"
             "现在加入T1体育，即可享受：\n\n"
             "💰 首存彩金加码\n"
             "🛡 专属包赔活动\n"
@@ -230,7 +230,7 @@ async def button_handler(
 
     elif query.data == "newbie":
         text = (
-            "【2. 新人彩金】🔥 新人专属福利已开启！\n\n"
+            "🔥 新人专属福利已开启！\n\n"
             "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
             "超多隐藏福利持续解锁中"
         )
@@ -238,7 +238,7 @@ async def button_handler(
 
     elif query.data == "checkin":
         text = (
-            "【3. 签到彩金】🚀 签到就能领，错过就是少拿！\n\n"
+            "🚀 签到就能领，错过就是少拿！\n\n"
             "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
             "⏰ 每月1日重新累计，越早参与越划算！\n\n"
             "回复：签到\n"
@@ -248,7 +248,7 @@ async def button_handler(
 
     elif query.data == "deposit":
         text = (
-            "【4. 日存彩金】🚀 今天的福利别漏领！\n\n"
+            "🚀 今天的福利别漏领！\n\n"
             "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
             "每天仅限领取一次，越早参与越划算！\n\n"
             "回复：每日首存\n"
@@ -258,7 +258,7 @@ async def button_handler(
 
     elif query.data == "invite":
         text = (
-            "【5. 推荐好礼】🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
+            "🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
             "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
             "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
         )
@@ -266,7 +266,7 @@ async def button_handler(
 
     elif query.data == "explore":
         text = (
-            "【6. 探索秘境】欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
+            "欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
             "https://t.me/Avior96Bot\n\n"
             "@Avior96Bot"
         )
