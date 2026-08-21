@@ -210,17 +210,68 @@ async def button_handler(
     await query.answer()
 
     if query.data == "register":
-        await send_feature_with_image(query, "register.png", "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
+        text = (
+            "【1. 注册平台】🎉 福利已上线，早注册早领取！\n"
+            "现在加入T1体育，即可享受：\n\n"
+            "💰 首存彩金加码\n"
+            "🛡 专属包赔活动\n"
+            "⚽️ 热门赛事推荐\n"
+            "🎯 竞猜互动奖励\n"
+            "🎁 隐藏活动福利\n\n"
+            "注册时务必填写邀请码：\n"
+            "🔑 20001136\n\n"
+            "🌐 注册地址：\n"
+            "https://www.t1ty.top?agentId=20001136\n\n"
+            "永久防失联地址：\n"
+            "https://jully.pw\n\n"
+            "注册完成后私讯我，即可领取专属福利礼包🎁"
+        )
+        await send_feature_with_image(query, "register.png", text)
+
     elif query.data == "newbie":
-        await send_feature_with_image(query, "newbie.png", "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
+        text = (
+            "【2. 新人彩金】🔥 新人专属福利已开启！\n\n"
+            "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
+            "超多隐藏福利持续解锁中"
+        )
+        await send_feature_with_image(query, "newbie.png", text)
+
     elif query.data == "checkin":
-        await send_feature_with_image(query, "checkin.png", "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
+        text = (
+            "【3. 签到彩金】🚀 签到就能领，错过就是少拿！\n\n"
+            "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
+            "⏰ 每月1日重新累计，越早参与越划算！\n\n"
+            "回复：签到\n"
+            "即可马上为你申请福利"
+        )
+        await send_feature_with_image(query, "checkin.png", text)
+
     elif query.data == "deposit":
-        await send_feature_with_image(query, "deposit.png", "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
+        text = (
+            "【4. 日存彩金】🚀 今天的福利别漏领！\n\n"
+            "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
+            "每天仅限领取一次，越早参与越划算！\n\n"
+            "回复：每日首存\n"
+            "马上为你申请，无需额外操作🎁"
+        )
+        await send_feature_with_image(query, "deposit.png", text)
+
     elif query.data == "invite":
-        await send_feature_with_image(query, "invite.png", "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
+        text = (
+            "【5. 推荐好礼】🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
+            "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
+            "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
+        )
+        await send_feature_with_image(query, "invite.png", text)
+
     elif query.data == "explore":
-        await send_feature_with_image(query, "explore.png", "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
+        text = (
+            "【6. 探索秘境】欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
+            "https://t.me/Avior96Bot\n\n"
+            "@Avior96Bot"
+        )
+        await send_feature_with_image(query, "explore.png", text)
+
     elif query.data == "support":
         await send_feature_with_image(query, "support.png", "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
 
@@ -378,17 +429,68 @@ async def reply_keyboard_handler(
     text = update.message.text
 
     if text == "📝 注册平台":
-        await send_feature_with_image(update, "register.png", "📝 【1. 注册平台】\n\n点击下方链接或访问官网完成账号注册：\nhttps://t.me/your_channel_link")
+        reg_text = (
+            "【1. 注册平台】🎉 福利已上线，早注册早领取！\n"
+            "现在加入T1体育，即可享受：\n\n"
+            "💰 首存彩金加码\n"
+            "🛡 专属包赔活动\n"
+            "⚽️ 热门赛事推荐\n"
+            "🎯 竞猜互动奖励\n"
+            "🎁 隐藏活动福利\n\n"
+            "注册时务必填写邀请码：\n"
+            "🔑 20001136\n\n"
+            "🌐 注册地址：\n"
+            "https://www.t1ty.top?agentId=20001136\n\n"
+            "永久防失联地址：\n"
+            "https://jully.pw\n\n"
+            "注册完成后私讯我，即可领取专属福利礼包🎁"
+        )
+        await send_feature_with_image(update, "register.png", reg_text)
+
     elif text == "🎁 新人彩金":
-        await send_feature_with_image(update, "newbie.png", "🎁 【2. 新人彩金】\n\n新用户首次绑定并完成实名，即可联系客服领取丰厚新人彩金！")
+        newbie_text = (
+            "【2. 新人彩金】🔥 新人专属福利已开启！\n\n"
+            "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
+            "超多隐藏福利持续解锁中"
+        )
+        await send_feature_with_image(update, "newbie.png", newbie_text)
+
     elif text == "📅 签到彩金":
-        await send_feature_with_image(update, "checkin.png", "📅 【3. 签到彩金】\n\n每日打卡签到，连续签到天数越多，签到彩金越丰厚！")
+        checkin_text = (
+            "【3. 签到彩金】🚀 签到就能领，错过就是少拿！\n\n"
+            "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
+            "⏰ 每月1日重新累计，越早参与越划算！\n\n"
+            "回复：签到\n"
+            "即可马上为你申请福利"
+        )
+        await send_feature_with_image(update, "checkin.png", checkin_text)
+
     elif text == "💰 日存彩金":
-        await send_feature_with_image(update, "deposit.png", "💰 【4. 日存彩金】\n\n每日充值尊享日存彩金加赠，多充多送，实时到账！")
+        deposit_text = (
+            "【4. 日存彩金】🚀 今天的福利别漏领！\n\n"
+            "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
+            "每天仅限领取一次，越早参与越划算！\n\n"
+            "回复：每日首存\n"
+            "马上为你申请，无需额外操作🎁"
+        )
+        await send_feature_with_image(update, "deposit.png", deposit_text)
+
     elif text == "👥 推荐好礼":
-        await send_feature_with_image(update, "invite.png", "👥 【5. 推荐好礼】\n\n分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！")
+        invite_text = (
+            "【5. 推荐好礼】🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
+            "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
+            "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
+        )
+        await send_feature_with_image(update, "invite.png", invite_text)
+
     elif text == "🗺 探索秘境":
-        await send_feature_with_image(update, "explore.png", "🗺 【6. 探索秘境】\n\n欢迎来到秘境探索频道，点击开启您的奇妙旅程：\nhttps://t.me/your_channel_link")
+        explore_text = (
+            "【6. 探索秘境】欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
+            "https://t.me/Avior96Bot\n\n"
+            "@Avior96Bot"
+        )
+        await send_feature_with_image(update, "explore.png", explore_text)
+
     elif text == "📞 联系客服":
         await send_feature_with_image(update, "support.png", "📞 【联系客服】\n\n如有任何疑问，请直接在对话框发送消息，专属客服将为您解答。")
 
@@ -474,7 +576,7 @@ def main():
         )
     )
 
-    print("🤖 AvGood Bot 已启动... v7")
+    print("🤖 AvGood Bot 已启动... v8")
     print("等待用户发送 /start")
 
     import threading
