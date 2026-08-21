@@ -517,8 +517,14 @@ async def admin_reply_customer(
     except Exception:
         return
 
+    # 1. 尝试通过当前话题找到对应的客户 ID
     customer_id = None
-    if message.reply_to_message:
+    thread_id = message.message_thread_id
+    if thread_id and thread_id in TOPIC_CUSTOMERS:
+        customer_id = TOPIC_CUSTOMERS[thread_id]
+
+    # 如果通过话题找不到，再尝试从回复的消息中提取
+    if customer_id is None and message.reply_to_message:
         replied_message = message.reply_to_message
         source_text = replied_message.text or replied_message.caption or ""
         match = re.search(r"Telegram ID:\s*(\d+)", source_text)
@@ -526,17 +532,12 @@ async def admin_reply_customer(
             customer_id = int(match.group(1))
 
     if customer_id is None:
-        thread_id = message.message_thread_id
-        if thread_id:
-            for cid, tid in CUSTOMER_TOPICS.items():
-                if tid == thread_id:
-                    customer_id = cid
-                    break
-
-    if customer_id is None:
         return
 
+    # 2. 检查当前客户的接待状态
     assigned_agent = CUSTOMER_AGENTS.get(customer_id)
+    
+    # 如果已有其他管理员在接待，且不是当前说话的人，则拦截
     if assigned_agent and assigned_agent != user.id:
         sent_err = await message.reply_text(
             "❌ 该客户当前正由其他管理员接待中，您暂时无法回复。\n"
@@ -550,6 +551,7 @@ async def admin_reply_customer(
             )
         return
 
+    # 如果还没人接待，或者当前说话的就是原管理员，则自动绑定/延续绑定
     if not assigned_agent:
         CUSTOMER_AGENTS[customer_id] = user.id
 
