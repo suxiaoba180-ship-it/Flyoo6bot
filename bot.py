@@ -1,9 +1,11 @@
 import os
 import re
 import sqlite3
+import logging
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ReplyKeyboardMarkup
+from telegram.error import TelegramError, BadRequest, Forbidden
 from telegram.ext import (
     Application,
     CommandHandler,
@@ -13,6 +15,12 @@ from telegram.ext import (
     filters,
 )
 
+
+# ==================================================
+# 日志
+# ==================================================
+logging.basicConfig(level=os.environ.get('LOG_LEVEL', 'INFO').upper(), format='%(asctime)s | %(levelname)s | %(name)s | %(message)s')
+logger = logging.getLogger('avgood_bot')
 
 # ==================================================
 # Bot Token
@@ -62,7 +70,61 @@ def init_db():
                 agent_name TEXT NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS registered_groups (
+                chat_id INTEGER PRIMARY KEY,
+                chat_title TEXT NOT NULL,
+                chat_type TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                registered_by INTEGER,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         conn.commit()
+
+def log_exception(action, exc, *, chat_id=None, user_id=None):
+    logger.exception(
+        "%s | chat_id=%s | user_id=%s | error=%s",
+        action, chat_id, user_id, exc
+    )
+
+
+def save_registered_group(chat_id, chat_title, chat_type, registered_by):
+    with db_connect() as conn:
+        conn.execute("""
+            INSERT INTO registered_groups(
+                chat_id, chat_title, chat_type, enabled, registered_by
+            )
+            VALUES(?, ?, ?, 1, ?)
+            ON CONFLICT(chat_id) DO UPDATE SET
+                chat_title=excluded.chat_title,
+                chat_type=excluded.chat_type,
+                enabled=1,
+                registered_by=excluded.registered_by,
+                updated_at=CURRENT_TIMESTAMP
+        """, (chat_id, chat_title or "未命名群组", chat_type, registered_by))
+        conn.commit()
+
+
+def get_registered_groups():
+    with db_connect() as conn:
+        return conn.execute("""
+            SELECT chat_id, chat_title, chat_type
+            FROM registered_groups
+            WHERE enabled = 1
+            ORDER BY chat_id
+        """).fetchall()
+
+
+def disable_registered_group(chat_id):
+    with db_connect() as conn:
+        conn.execute(
+            "UPDATE registered_groups SET enabled=0, updated_at=CURRENT_TIMESTAMP WHERE chat_id=?",
+            (chat_id,)
+        )
+        conn.commit()
+
 
 def get_customer_topic(customer_id):
     with db_connect() as conn:
@@ -170,27 +232,44 @@ ACTIVE_GROUPS = set(GROUP_ADS.keys())
 # 定时群发广告任务（图文完全独立版）
 # ============================================================
 async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
-    for chat_id, data in GROUP_ADS.items():
+    """每小时向已通过 /groupid 登记的群发送广告。"""
+    default_ad = next(iter(GROUP_ADS.values()), None)
+    if not default_ad:
+        logger.warning("没有可用的默认广告配置，跳过本轮群发")
+        return
+
+    for row in get_registered_groups():
+        chat_id = row["chat_id"]
+        data = GROUP_ADS.get(chat_id, default_ad)
         ad_text = data["text"]
-        ad_image_name = data["image"]
+        ad_image_name = data.get("image")
+
         try:
-            ad_image_path = os.path.join(BASE_DIR, ad_image_name)
-            if os.path.exists(ad_image_path):
+            ad_image_path = os.path.join(BASE_DIR, ad_image_name) if ad_image_name else ""
+            if ad_image_path and os.path.exists(ad_image_path):
                 with open(ad_image_path, "rb") as photo:
                     await context.bot.send_photo(
-                        chat_id=chat_id, 
-                        photo=photo, 
-                        caption=ad_text, 
-                        reply_markup=get_inline_keyboard()
+                        chat_id=chat_id,
+                        photo=photo,
+                        caption=ad_text,
+                        reply_markup=get_inline_keyboard(),
                     )
             else:
                 await context.bot.send_message(
-                    chat_id=chat_id, 
-                    text=ad_text, 
-                    reply_markup=get_inline_keyboard()
+                    chat_id=chat_id,
+                    text=ad_text,
+                    reply_markup=get_inline_keyboard(),
                 )
+            logger.info("定时广告发送成功 | chat_id=%s", chat_id)
+        except Forbidden as e:
+            logger.error("机器人已无权访问群组，自动停用 | chat_id=%s | %s", chat_id, e)
+            disable_registered_group(chat_id)
+        except BadRequest as e:
+            logger.error("Telegram 拒绝广告消息 | chat_id=%s | %s", chat_id, e)
+        except TelegramError as e:
+            log_exception("定时广告发送失败", e, chat_id=chat_id)
         except Exception as e:
-            print(f"❌ 向群组 {chat_id} 发送广告失败: {e}")
+            log_exception("定时广告未知异常", e, chat_id=chat_id)
 
 
 # ============================================================
@@ -249,6 +328,24 @@ def get_support_control_keyboard(customer_id, current_agent_name=None):
         ])
 
 # ==================================================
+# 客服话题健康检查
+# ==================================================
+async def topic_exists(context: ContextTypes.DEFAULT_TYPE, topic_id):
+    try:
+        await context.bot.get_forum_topic(
+            chat_id=SUPPORT_GROUP_ID,
+            message_thread_id=topic_id,
+        )
+        return True
+    except BadRequest as e:
+        logger.warning("客服话题不存在或已删除 | topic_id=%s | %s", topic_id, e)
+        return False
+    except TelegramError as e:
+        log_exception("检查客服话题失败", e, chat_id=SUPPORT_GROUP_ID)
+        return True
+
+
+# ==================================================
 # 核心公共函数：确保客户私聊时在群里有专属话题
 # ==================================================
 async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
@@ -257,7 +354,19 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
 
     existing_topic_id = get_customer_topic(customer_id)
     if existing_topic_id:
-        return existing_topic_id
+        if await topic_exists(context, existing_topic_id):
+            return existing_topic_id
+
+        logger.info(
+            "检测到旧客服话题已删除，自动重建 | customer_id=%s | old_topic_id=%s",
+            customer_id, existing_topic_id
+        )
+        with db_connect() as conn:
+            conn.execute(
+                "DELETE FROM customer_topics WHERE customer_id = ?",
+                (customer_id,)
+            )
+            conn.commit()
 
     try:
         topic_name = f"👤 {user.full_name}"
@@ -292,7 +401,7 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
             pass
 
     except Exception as e:
-        print(f"❌ 创建客户话题失败：{e}")
+        log_exception("创建客户话题失败", e, chat_id=SUPPORT_GROUP_ID, user_id=customer_id)
         return None
     
     return get_customer_topic(customer_id)
@@ -314,7 +423,7 @@ async def notify_customer_action(context: ContextTypes.DEFAULT_TYPE, user, actio
                 text=text
             )
         except Exception as e:
-            print(f"❌ 同步客户按钮点击到群组失败：{e}")
+            log_exception("同步客户按钮点击到群组失败", e, chat_id=SUPPORT_GROUP_ID, user_id=user.id)
 
 
 # ==================================================
@@ -379,20 +488,52 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================================================
 async def groupid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    if not user or user.id != ADMIN_ID:
-        await update.message.reply_text("❌ 你没有权限使用 /groupid。")
+    message = update.effective_message
+    chat = update.effective_chat
+
+    if not user or not message or user.id != ADMIN_ID:
+        if message:
+            await message.reply_text("❌ 你没有权限使用 /groupid。")
         return
 
-    chat = update.effective_chat
-    if chat.type in ["group", "supergroup"]:
+    if not chat or chat.type not in ("group", "supergroup"):
+        await message.reply_text("❌ /groupid 只能在群组或超级群组中使用。")
+        return
+
+    try:
+        bot_member = await context.bot.get_chat_member(
+            chat_id=chat.id,
+            user_id=context.bot.id
+        )
+        if bot_member.status not in ("administrator", "creator"):
+            await message.reply_text("❌ 机器人必须是本群管理员，才能登记并发送定时广告。")
+            return
+
+        save_registered_group(
+            chat_id=chat.id,
+            chat_title=chat.title or "未命名群组",
+            chat_type=chat.type,
+            registered_by=user.id,
+        )
         ACTIVE_GROUPS.add(chat.id)
 
-    await update.message.reply_text(
-        f"📌 当前聊天信息\n\n"
-        f"群组名称：{chat.title}\n"
-        f"Chat ID：{chat.id}\n"
-        f"类型：{chat.type}"
-    )
+        await message.reply_text(
+            "✅ 群组登记成功！\n\n"
+            f"📌 群组名称：{chat.title or '未命名'}\n"
+            f"🆔 Chat ID：{chat.id}\n"
+            f"📂 类型：{chat.type}\n\n"
+            "⏰ 已加入每小时定时广告任务。"
+        )
+        logger.info("群组登记成功 | chat_id=%s | title=%s | registered_by=%s",
+                    chat.id, chat.title, user.id)
+
+    except TelegramError as e:
+        log_exception("群组登记失败", e, chat_id=chat.id, user_id=user.id)
+        await message.reply_text("❌ 群组登记失败，请确认机器人是群管理员并重试。")
+    except Exception as e:
+        log_exception("群组登记未知异常", e, chat_id=chat.id, user_id=user.id)
+        await message.reply_text("❌ 群组登记出现异常，请稍后重试。")
+
 
 # ==================================================
 # /myid
@@ -653,8 +794,24 @@ async def handle_private_message(
             message_id=message.message_id,
             message_thread_id=topic_id
         )
+        logger.info(
+            "客户消息已转入客服话题 | customer_id=%s | topic_id=%s | message_id=%s",
+            user.id, topic_id, message.message_id
+        )
+    except TelegramError as e:
+        log_exception("转发客户消息到客服群失败", e,
+                      chat_id=SUPPORT_GROUP_ID, user_id=user.id)
+        try:
+            await message.reply_text("⚠️ 当前客服系统暂时无法接收这条消息，请稍后重试。")
+        except Exception as notify_error:
+            log_exception("发送客户错误提示失败", notify_error, chat_id=user.id, user_id=user.id)
     except Exception as e:
-        print(f"❌ 转发客户消息到群组失败：{e}")
+        log_exception("转发客户消息未知异常", e,
+                      chat_id=SUPPORT_GROUP_ID, user_id=user.id)
+        try:
+            await message.reply_text("⚠️ 客服系统出现临时异常，请稍后重试。")
+        except Exception as notify_error:
+            log_exception("发送客户错误提示失败", notify_error, chat_id=user.id, user_id=user.id)
 
 
 # ==================================================
@@ -786,13 +943,13 @@ async def admin_reply_customer(
         return
 
     try:
-        if message.text:
-            await context.bot.send_message(chat_id=customer_id, text=message.text)
-        elif message.photo:
-            await context.bot.send_photo(chat_id=customer_id, photo=message.photo[-1].file_id, caption=message.caption)
-        
+        await context.bot.copy_message(
+            chat_id=customer_id,
+            from_chat_id=SUPPORT_GROUP_ID,
+            message_id=message.message_id,
+        )
+
         sent_msg = await message.reply_text("✅ 已发送给客户。")
-        
         if context.job_queue:
             context.job_queue.run_once(
                 delete_notification_callback,
@@ -800,9 +957,27 @@ async def admin_reply_customer(
                 data={"chat_id": chat.id, "message_id": sent_msg.message_id}
             )
 
+        logger.info(
+            "客服消息发送成功 | customer_id=%s | agent_id=%s | message_id=%s",
+            customer_id, user.id, message.message_id
+        )
+
+    except Forbidden as e:
+        log_exception("客服发送失败：客户可能已屏蔽机器人", e,
+                      chat_id=customer_id, user_id=user.id)
+        await message.reply_text("❌ 发送失败：客户可能已拉黑或屏蔽机器人。")
+    except BadRequest as e:
+        log_exception("Telegram 拒绝客服消息", e,
+                      chat_id=customer_id, user_id=user.id)
+        await message.reply_text("❌ 发送失败：该消息类型可能不支持复制，或客户账号状态异常。")
+    except TelegramError as e:
+        log_exception("客服回复 Telegram 异常", e,
+                      chat_id=customer_id, user_id=user.id)
+        await message.reply_text("❌ 客服消息发送失败，请稍后重试。")
     except Exception as e:
-        print(f"❌ 客服回复失败：{e}")
-        await message.reply_text("❌ 发送失败，用户可能屏蔽了机器人。")
+        log_exception("客服回复未知异常", e,
+                      chat_id=customer_id, user_id=user.id)
+        await message.reply_text("❌ 客服消息发送失败，请稍后重试。")
 
 
 # ============================================================
