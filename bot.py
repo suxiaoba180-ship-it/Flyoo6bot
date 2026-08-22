@@ -1079,8 +1079,17 @@ async def basketball_api_get(client, endpoint, params):
     return payload.get("response") or []
 
 async def fetch_today_games(client):
-    today = china_now().date().isoformat()
-    games = await basketball_api_get(client, "/games", {"date": today})
+    now_date = china_now()
+    today = now_date.date().isoformat()
+    # 获取当前的年份作为赛季，例如 "2026"
+    current_season = str(now_date.year)
+    
+    # 加上 season 参数，满足 api-sports.io 接口的要求
+    games = await basketball_api_get(client, "/games", {
+        "date": today,
+        "season": current_season
+    })
+    
     now = china_now()
     selected = []
     seen = set()
