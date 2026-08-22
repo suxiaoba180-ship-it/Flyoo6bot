@@ -1036,7 +1036,7 @@ async def fetch_today_games(client):
         selected.append(game)
 
     selected.sort(key=lambda item: item["_china_datetime"])
-    return selected[:BASKETBALL_TOP_N]
+    return selected
 
 
 def extract_game_result(game, team_id):
@@ -1836,7 +1836,7 @@ async def test_basketball_manual(update: Update, context: ContextTypes.DEFAULT_T
             games = await fetch_today_games(client)
 
             if not games:
-                message_text = "🏀 今日篮球赛事数据分析（测试）\n\n今日暂无符合条件的未开赛篮球比赛（API正常连通）。"
+                message_text = "🏀 今日篮球赛事精选\n\n""暂无符合数据条件赛事。"
             else:
                 analyses = []
                 for game in games:
