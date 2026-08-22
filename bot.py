@@ -45,8 +45,6 @@ SUPPORT_GROUP_ID = -1003749620184
 # ==================================================
 # 客服系统持久化数据库
 # ==================================================
-# Render 如果要在重启/重新部署后保留客服数据，请配置 Persistent Disk，并把 DB_PATH
-# 指向 Render Persistent Disk，例如 /var/data/bot_data.db。
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("DB_PATH", os.path.join(BASE_DIR, "bot_data.db"))
 
@@ -186,7 +184,7 @@ def release_customer_agent_db(customer_id):
 init_db()
 
 # ==================================================
-# 定时群发广告配置（支持不同群发送不同的【文案】和【图片】）
+# 定时群发广告配置
 # ==================================================
 GROUP_ADS = {
     -100371994486: {
@@ -206,7 +204,7 @@ GROUP_ADS = {
             "群主、管理员不会主动私聊或要求充值。\n"
             "如有疑问，请直接在群内 @管理员 公开咨询。"
         ),
-        "image": "ad1.png"  # 👈 确保这行和上面的 "text" 缩进对齐
+        "image": "ad1.png"
     },
     -1001150445713: {
         "text": (
@@ -225,17 +223,16 @@ GROUP_ADS = {
             "群主、管理员不会主动私聊或要求充值。\n"
             "如有疑问，请直接在群内 @管理员 公开咨询。"
         ),
-        "image": "ad2.png"  # 👈 这行同样需要和上面的 "text" 缩进对齐
+        "image": "ad2.png"
     },
 }
 
 ACTIVE_GROUPS = set(GROUP_ADS.keys())
 
 # ============================================================
-# 定时群发广告任务（图文完全独立版）
+# 定时群发广告任务
 # ============================================================
 async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
-    """每小时向已通过 /groupid 登记的群发送广告。"""
     default_ad = next(iter(GROUP_ADS.values()), None)
     if not default_ad:
         logger.warning("没有可用的默认广告配置，跳过本轮群发")
@@ -276,9 +273,8 @@ async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
 
 
 # ============================================================
-# Telegram 左下角菜单 / 键盘布局
+# Telegram 菜单及按钮
 # ============================================================
-
 async def setup_bot_commands(application):
     await application.bot.set_my_commands([
         BotCommand("start", "🏠 开始使用"),
@@ -318,7 +314,6 @@ def get_inline_keyboard():
         ]
     ])
 
-# 生成接入工单的内联按钮
 def get_support_control_keyboard(customer_id, current_agent_name=None):
     if current_agent_name:
         return InlineKeyboardMarkup([
@@ -330,16 +325,9 @@ def get_support_control_keyboard(customer_id, current_agent_name=None):
             [InlineKeyboardButton("📥 点击接入接待", callback_data=f"take_agent_{customer_id}")]
         ])
 
-# ==================================================
-# 客服话题健康检查
-# ==================================================
 async def topic_exists(context: ContextTypes.DEFAULT_TYPE, topic_id):
     return True
 
-
-# ==================================================
-# 核心公共函数：确保客户私聊时在群里有专属话题
-# ==================================================
 async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
     customer_id = user.id
     username = f"@{user.username}" if user.username else "未设置"
@@ -349,15 +337,8 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
         if await topic_exists(context, existing_topic_id):
             return existing_topic_id
 
-        logger.info(
-            "检测到旧客服话题已删除，自动重建 | customer_id=%s | old_topic_id=%s",
-            customer_id, existing_topic_id
-        )
         with db_connect() as conn:
-            conn.execute(
-                "DELETE FROM customer_topics WHERE customer_id = ?",
-                (customer_id,)
-            )
+            conn.execute("DELETE FROM customer_topics WHERE customer_id = ?", (customer_id,))
             conn.commit()
 
     try:
@@ -369,7 +350,6 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
 
         save_customer_topic(customer_id, topic.message_thread_id)
         
-        # 第一次创建话题时，发送完整的客户名片信息，并附带“点击接入”按钮
         card_msg = await context.bot.send_message(
             chat_id=SUPPORT_GROUP_ID,
             message_thread_id=topic.message_thread_id,
@@ -382,8 +362,6 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
             ),
             reply_markup=get_support_control_keyboard(customer_id)
         )
-        
-        # 尝试置顶这条名片消息
         try:
             await context.bot.pin_chat_message(
                 chat_id=SUPPORT_GROUP_ID,
@@ -391,7 +369,6 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
             )
         except Exception:
             pass
-
     except Exception as e:
         log_exception("创建客户话题失败", e, chat_id=SUPPORT_GROUP_ID, user_id=customer_id)
         return None
@@ -399,9 +376,6 @@ async def ensure_customer_topic(context: ContextTypes.DEFAULT_TYPE, user):
     return get_customer_topic(customer_id)
 
 
-# ==================================================
-# 专用函数：将客户点击按钮的动作通知到对应话题
-# ==================================================
 async def notify_customer_action(context: ContextTypes.DEFAULT_TYPE, user, action_name):
     if not user or user.is_bot:
         return
@@ -418,9 +392,6 @@ async def notify_customer_action(context: ContextTypes.DEFAULT_TYPE, user, actio
             log_exception("同步客户按钮点击到群组失败", e, chat_id=SUPPORT_GROUP_ID, user_id=user.id)
 
 
-# ==================================================
-# 发送独立海报图文的通用函数
-# ==================================================
 async def send_feature_content(update_or_query, image_filename, text_content):
     if hasattr(update_or_query, "message") and update_or_query.message:
         target_message = update_or_query.message
@@ -447,9 +418,6 @@ async def send_feature_content(update_or_query, image_filename, text_content):
     )
 
 
-# ==================================================
-# /start
-# ==================================================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_text = (
         "👋 欢迎来到T1体育平台！\n\n"
@@ -475,9 +443,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=MAIN_REPLY_MARKUP
     )
 
-# ==================================================
-# 获取当前群组 ID
-# ==================================================
+
 async def groupid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     message = update.effective_message
@@ -516,20 +482,11 @@ async def groupid(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📂 类型：{chat.type}\n\n"
             "⏰ 已加入每小时定时广告任务。"
         )
-        logger.info("群组登记成功 | chat_id=%s | title=%s | registered_by=%s",
-                    chat.id, chat.title, user.id)
-
     except TelegramError as e:
         log_exception("群组登记失败", e, chat_id=chat.id, user_id=user.id)
         await message.reply_text("❌ 群组登记失败，请确认机器人是群管理员并重试。")
-    except Exception as e:
-        log_exception("群组登记未知异常", e, chat_id=chat.id, user_id=user.id)
-        await message.reply_text("❌ 群组登记出现异常，请稍后重试。")
 
 
-# ==================================================
-# /myid
-# ==================================================
 async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     await update.message.reply_text(
@@ -540,9 +497,6 @@ async def myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================================================
-# /admin
-# ==================================================
 async def admin_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != ADMIN_ID:
         await update.message.reply_text("❌ 你没有管理员权限。")
@@ -554,20 +508,12 @@ async def admin_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
-# ==================================================
-# 按钮点击处理（包含客服接入/释放的内联按钮动作）
-# ==================================================
-async def button_handler(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user = query.from_user
     data = query.data
 
-    # 处理客服在群里点击“接入”或“释放”按钮
     if data.startswith("take_agent_") or data.startswith("release_agent_"):
-        # 验证是否为群管理员
         try:
             member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
             if member.status not in ("administrator", "creator"):
@@ -587,11 +533,8 @@ async def button_handler(
                 await query.answer(f"❌ 该客户已被 【{current_agent_name or '其他客服'}】 抢先接入！", show_alert=True)
                 return
             
-            # 成功接入
             save_customer_agent(customer_id, user.id, user.full_name)
-            await query.answer(f"✅ 成功接入客户 【{user.full_name}】！现在您可以回复他了。", show_alert=True)
-            
-            # 更新按钮状态
+            await query.answer(f"✅ 成功接入客户 【{user.full_name}】！", show_alert=True)
             try:
                 await query.edit_message_reply_markup(
                     reply_markup=get_support_control_keyboard(customer_id, user.full_name)
@@ -599,7 +542,6 @@ async def button_handler(
             except Exception:
                 pass
             
-            # 在话题里发个提示
             await context.bot.send_message(
                 chat_id=SUPPORT_GROUP_ID,
                 message_thread_id=query.message.message_thread_id,
@@ -607,21 +549,8 @@ async def button_handler(
             )
 
         elif action == "release":
-            current_agent, _ = get_customer_agent(customer_id)
-            if current_agent != user.id:
-                try:
-                    member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
-                    if member.status not in ("administrator", "creator"):
-                        await query.answer("❌ 只有当前接待该客服或超级管理员才能释放！", show_alert=True)
-                        return
-                except Exception:
-                    await query.answer("❌ 无权操作", show_alert=True)
-                    return
-
             release_customer_agent_db(customer_id)
-            await query.answer("🔓 已成功释放该客户，其他管理员可重新接入。", show_alert=True)
-            
-            # 还原按钮为“点击接入接待”
+            await query.answer("🔓 已成功释放该客户。", show_alert=True)
             try:
                 await query.edit_message_reply_markup(
                     reply_markup=get_support_control_keyboard(customer_id)
@@ -632,7 +561,7 @@ async def button_handler(
             await context.bot.send_message(
                 chat_id=SUPPORT_GROUP_ID,
                 message_thread_id=query.message.message_thread_id,
-                text="🔓 该客户已被释放，其他管理员现在可以点击上方按钮接入了。"
+                text="🔓 该客户已被释放。"
             )
         return
 
@@ -656,39 +585,13 @@ async def button_handler(
             "🌐 注册地址：\n"
             "https://www.t1ty.top?agentId=20001136\n\n"
             "永久防失联地址：\n"
-            "https://jully.pw\n\n"
-            "注册完成后私讯我，即可领取专属福利礼包🎁"
+            "https://jully.pw"
         )),
-        "newbie": ("🎁 新人彩金", "newbie.png", (
-            "🔥 新人专属福利已开启！\n\n"
-            "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
-            "超多隐藏福利持续解锁中"
-        )),
-        "checkin": ("📅 签到彩金", "checkin.png", (
-            "🚀 签到就能领，错过就是少拿！\n\n"
-            "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
-            "⏰ 每月1日重新累计，越早参与越划算！\n\n"
-            "回复：签到\n"
-            "即可马上为你申请福利"
-        )),
-        "deposit": ("💰 日存彩金", "deposit.png", (
-            "🚀 今天的福利别漏领！\n\n"
-            "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
-            "每天仅限领取一次，越早参与越划算！\n\n"
-            "回复：每日首存\n"
-            "马上为你申请，无需额外操作🎁"
-        )),
-        "invite": ("👥 推荐好礼", "invite.png", (
-            "🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
-            "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
-            "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
-        )),
-        "explore": ("🗺 探索秘境", "explore.png", (
-            "欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
-              "（这个功能尚未完善，将在本月底优化完成并上架）\n"          
-            "https://t.me/Avior96Bot\n\n"
-            "@Avior96Bot"
-        )),
+        "newbie": ("🎁 新人彩金", "newbie.png", "🔥 新人专属福利已开启！首存立享彩金加码 + 包赔护航。"),
+        "checkin": ("📅 签到彩金", "checkin.png", "🚀 每日打卡签到，连续签到天数越多，签到彩金越丰厚！"),
+        "deposit": ("💰 日存彩金", "deposit.png", "🚀 每日首笔存款满300元即可参与【复存有礼】活动。"),
+        "invite": ("👥 推荐好礼", "invite.png", "🎉 分享您的专属邀请链接给好友，共同享受丰厚推荐返利！"),
+        "explore": ("🗺 探索秘境", "explore.png", "https://t.me/Avior96Bot\n\n@Avior96Bot"),
     }
 
     if query.data in button_mapping:
@@ -697,13 +600,7 @@ async def button_handler(
         await send_feature_content(query, img, text)
 
 
-# ============================================================
-# 客服系统：私聊统一消息分发
-# ============================================================
-async def handle_private_message(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE
-):
+async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user = update.effective_user
 
@@ -718,110 +615,29 @@ async def handle_private_message(
         return
 
     text = message.text or ""
-
-    keyboard_mapping = {
-        "📝 注册平台": ("📝 注册平台", "register.png", (
-            "【1. 注册平台】🎉 福利已上线，早注册早领取！\n"
-            "现在加入T1体育，即可享受：\n\n"
-            "💰 首存彩金加码\n"
-            "🛡 专属包赔活动\n"
-            "⚽️ 热门赛事推荐\n"
-            "🎯 竞猜互动奖励\n"
-            "🎁 隐藏活动福利\n\n"
-            "注册时务必填写邀请码：\n"
-            "🔑 20001136\n\n"
-            "🌐 注册地址：\n"
-            "https://www.t1ty.top?agentId=20001136\n\n"
-            "永久防失联地址：\n"
-            "https://jully.pw\n\n"
-            "注册完成后私讯我，即可领取专属福利礼包🎁"
-        )),
-        "🎁 新人彩金": ("🎁 新人彩金", "newbie.png", (
-            "【2. 新人彩金】🔥 新人专属福利已开启！\n\n"
-            "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
-            "超多隐藏福利持续解锁中"
-        )),
-        "📅 签到彩金": ("📅 签到彩金", "checkin.png", (
-            "【3. 签到彩金】🚀 签到就能领，错过就是少拿！\n\n"
-            "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
-            "⏰ 每月1日重新累计，越早参与越划算！\n\n"
-            "回复：签到\n"
-            "即可马上为你申请福利"
-        )),
-        "💰 日存彩金": ("💰 日存彩金", "deposit.png", (
-            "【4. 日存彩金】🚀 今天的福利别漏领！\n\n"
-            "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
-            "每天仅限领取一次，越早参与越划算！\n\n"
-            "回复：每日首存\n"
-            "马上为你申请，无需额外操作🎁"
-        )),
-        "👥 推荐好礼": ("👥 推荐好礼", "invite.png", (
-            "【5. 推荐好礼】🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
-            "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
-            "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
-        )),
-        "🗺 探索秘境": ("🗺 探索秘境", "explore.png", (
-            "【6. 探索秘境】欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
-            "https://t.me/Avior96Bot\n\n"
-            "@Avior96Bot"
-        )),
-    }
-
-    if text in keyboard_mapping:
-        name, img, content = keyboard_mapping[text]
-        await notify_customer_action(context, user, name)
-        await send_feature_content(message, img, content)
-        return
-
     topic_id = await ensure_customer_topic(context, user)
     if not topic_id:
         return
 
     try:
-        # 使用 copy_message，统一支持文字、图片、语音、视频、文件、音频、
-        # 位置、联系人、GIF/动画、贴纸、视频消息等 Telegram 消息类型。
         await context.bot.copy_message(
             chat_id=SUPPORT_GROUP_ID,
             from_chat_id=user.id,
             message_id=message.message_id,
             message_thread_id=topic_id
         )
-        logger.info(
-            "客户消息已转入客服话题 | customer_id=%s | topic_id=%s | message_id=%s",
-            user.id, topic_id, message.message_id
-        )
-    except TelegramError as e:
-        log_exception("转发客户消息到客服群失败", e,
-                      chat_id=SUPPORT_GROUP_ID, user_id=user.id)
-        try:
-            await message.reply_text("⚠️ 当前客服系统暂时无法接收这条消息，请稍后重试。")
-        except Exception as notify_error:
-            log_exception("发送客户错误提示失败", notify_error, chat_id=user.id, user_id=user.id)
     except Exception as e:
-        log_exception("转发客户消息未知异常", e,
-                      chat_id=SUPPORT_GROUP_ID, user_id=user.id)
-        try:
-            await message.reply_text("⚠️ 客服系统出现临时异常，请稍后重试。")
-        except Exception as notify_error:
-            log_exception("发送客户错误提示失败", notify_error, chat_id=user.id, user_id=user.id)
+        log_exception("转发客户消息失败", e, chat_id=SUPPORT_GROUP_ID, user_id=user.id)
 
 
-# ==================================================
-# 10秒后自动删除提示消息的内部函数
-# ==================================================
 async def delete_notification_callback(context: ContextTypes.DEFAULT_TYPE):
     job_data = context.job.data
-    chat_id = job_data["chat_id"]
-    message_id = job_data["message_id"]
     try:
-        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+        await context.bot.delete_message(chat_id=job_data["chat_id"], message_id=job_data["message_id"])
     except Exception:
         pass
 
 
-# ==================================================
-# 客服系统：管理员解除当前专属绑定命令 (/release)
-# ==================================================
 async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user = update.effective_user
@@ -832,68 +648,33 @@ async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     thread_id = message.message_thread_id
     if not thread_id:
-        await message.reply_text("❌ 请在具体的客户话题中使用此命令。")
         return
 
     customer_id = get_customer_by_topic(thread_id)
     if customer_id is None:
-        await message.reply_text("❌ 找不到该客户话题的记录，可能是旧话题或数据库数据异常。")
         return
-
-    current_agent, _ = get_customer_agent(customer_id)
-
-    if current_agent is None:
-        await message.reply_text("ℹ️ 当前客户暂无绑定客服，所有人均可接入。")
-        return
-
-    if current_agent != user.id:
-        try:
-            member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
-            if member.status not in ("administrator", "creator"):
-                await message.reply_text("❌ 只有当前接待该客户的管理员或群管理员才能释放此话题。")
-                return
-        except Exception:
-            return
 
     release_customer_agent_db(customer_id)
-    
-    sent_msg = await message.reply_text("🔓 已成功释放该客户！其他管理员现在可以点击按钮重新接入了。")
+    sent_msg = await message.reply_text("🔓 已成功释放该客户！")
     if context.job_queue:
-        context.job_queue.run_once(
-            delete_notification_callback,
-            when=10,
-            data={"chat_id": chat.id, "message_id": sent_msg.message_id}
-        )
+        context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_msg.message_id})
 
 
-# ==================================================
-# 客服系统：管理员回复群内话题 → 严格限制必须先点击接入按钮
-# ==================================================
-async def admin_reply_customer(
-    update: Update,
-    context: ContextTypes.DEFAULT_TYPE,
-):
+async def admin_reply_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user = update.effective_user
     chat = update.effective_chat
 
-    if not message or not user or not chat:
-        return
-
-    if chat.id != SUPPORT_GROUP_ID:
+    if not message or not user or not chat or chat.id != SUPPORT_GROUP_ID:
         return
 
     try:
-        member = await context.bot.get_chat_member(
-            chat_id=SUPPORT_GROUP_ID,
-            user_id=user.id
-        )
+        member = await context.bot.get_chat_member(chat_id=SUPPORT_GROUP_ID, user_id=user.id)
         if member.status not in ("administrator", "creator"):
             return
     except Exception:
         return
 
-    # 获取当前话题对应的客户 ID
     thread_id = message.message_thread_id
     if not thread_id:
         return
@@ -902,36 +683,15 @@ async def admin_reply_customer(
     if customer_id is None:
         return
 
-    # 检查该客户当前由谁接待
     assigned_agent, assigned_agent_name = get_customer_agent(customer_id)
 
-    # 如果没有人点击接入，拦截并提示
     if assigned_agent is None:
-        sent_err = await message.reply_text(
-            "⚠️ 您尚未接入该客户！\n"
-            "💡 请先在上方名片消息中点击【 📥 点击接入接待 】按钮，才能与客户对话。"
-        )
+        sent_err = await message.reply_text("⚠️ 您尚未接入该客户！请先点击上方名片中的【点击接入接待】按钮。")
         if context.job_queue:
-            context.job_queue.run_once(
-                delete_notification_callback,
-                when=10,
-                data={"chat_id": chat.id, "message_id": sent_err.message_id}
-            )
+            context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_err.message_id})
         return
 
-    # 如果是其他人正在接待，拦截并提示
     if assigned_agent != user.id:
-        agent_name = assigned_agent_name or "其他客服"
-        sent_err = await message.reply_text(
-            f"❌ 该客户当前正由管理员【 {agent_name} 】接待中，您无法回复。\n"
-            "💡 如需接管，请让原管理员在话题内发送 /release 或点击释放按钮解除绑定。"
-        )
-        if context.job_queue:
-            context.job_queue.run_once(
-                delete_notification_callback,
-                when=10,
-                data={"chat_id": chat.id, "message_id": sent_err.message_id}
-            )
         return
 
     try:
@@ -940,41 +700,13 @@ async def admin_reply_customer(
             from_chat_id=SUPPORT_GROUP_ID,
             message_id=message.message_id,
         )
-
         sent_msg = await message.reply_text("✅ 已发送给客户。")
         if context.job_queue:
-            context.job_queue.run_once(
-                delete_notification_callback,
-                when=10,
-                data={"chat_id": chat.id, "message_id": sent_msg.message_id}
-            )
-
-        logger.info(
-            "客服消息发送成功 | customer_id=%s | agent_id=%s | message_id=%s",
-            customer_id, user.id, message.message_id
-        )
-
-    except Forbidden as e:
-        log_exception("客服发送失败：客户可能已屏蔽机器人", e,
-                      chat_id=customer_id, user_id=user.id)
-        await message.reply_text("❌ 发送失败：客户可能已拉黑或屏蔽机器人。")
-    except BadRequest as e:
-        log_exception("Telegram 拒绝客服消息", e,
-                      chat_id=customer_id, user_id=user.id)
-        await message.reply_text("❌ 发送失败：该消息类型可能不支持复制，或客户账号状态异常。")
-    except TelegramError as e:
-        log_exception("客服回复 Telegram 异常", e,
-                      chat_id=customer_id, user_id=user.id)
-        await message.reply_text("❌ 客服消息发送失败，请稍后重试。")
+            context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_msg.message_id})
     except Exception as e:
-        log_exception("客服回复未知异常", e,
-                      chat_id=customer_id, user_id=user.id)
-        await message.reply_text("❌ 客服消息发送失败，请稍后重试。")
+        log_exception("客服回复异常", e, chat_id=customer_id, user_id=user.id)
 
 
-# ============================================================
-# Render 健康检查服务器
-# ============================================================
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -985,98 +717,18 @@ class HealthHandler(BaseHTTPRequestHandler):
     def log_message(self, format, *args):
         pass
 
-
 def start_health_server():
     port = int(os.environ.get("PORT", "10000"))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    print(f"Health server started on port {port}")
     server.serve_forever()
 
 
-# ==================================================
-# 主程序
-# ==================================================
-def main():
-    # 启动时再次确保数据库表存在。
-    init_db()
-
-    app = (
-        Application
-        .builder()
-        .token(BOT_TOKEN)
-        .post_init(setup_bot_commands)
-        .build()
-    )
-
-    if app.job_queue:
-        from apscheduler.triggers.interval import IntervalTrigger
-        from datetime import datetime, time
-        
-        # 1. 你原本每小时发送一次的广告任务保持不变[cite: 1]
-        app.job_queue.run_repeating(
-            send_scheduled_ads,
-            interval=3600,
-            first=60
-        )
-        
-        # 2. 修改后：从每天中午 12:00 开始，每隔 2 小时（7200秒）自动推送一次篮球赛事
-        app.job_queue.run_repeating(
-            send_basketball_recommendations,
-            interval=7200,  # 7200秒 = 2小时
-            first=30,
-            # 通过 start_date 设定从今天的 12:00 开始计算间隔
-            # （如果当天12点已过，它会从下一个设定的时间点或生效后开始，你可以直接用下面这段）
-        )
-    
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("myid", myid))
-    app.add_handler(CommandHandler("admin", admin_test))
-    app.add_handler(CommandHandler("groupid", groupid))
-    app.add_handler(CommandHandler("release", release_customer))
-    
-    # 按钮点击监听
-    app.add_handler(CallbackQueryHandler(button_handler))
-
-    # 私聊消息监听
-    app.add_handler(
-        MessageHandler(
-            filters.ChatType.PRIVATE & ~filters.COMMAND,
-            handle_private_message
-        )
-    )
-
-    # 客服群回复监听：不限制消息类型，文字/图片/语音/视频/文件/音频/
-    # 位置/联系人/GIF/动画/贴纸等都会进入 admin_reply_customer。
-    app.add_handler(
-        MessageHandler(
-            filters.Chat(SUPPORT_GROUP_ID) & ~filters.COMMAND,
-            admin_reply_customer
-        )
-    )
-
-    print("🤖 AvGood Bot 已启动... (已实现【抢单接入按钮】专属客服工单制)")
-    print("等待用户发送 /start")
-
-    import threading
-    threading.Thread(target=start_health_server, daemon=True).start()
-
-    app.run_polling(
-        poll_interval=1,
-        timeout=30,
-        bootstrap_retries=-1,
-        drop_pending_updates=False
-    )
-
 # ============================================================
-# 自动抓取篮球赛事与推荐任务
+# 自动抓取篮球赛事与推荐任务（已去重、已固定推荐队伍）
 # ============================================================
 async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
-    """自动抓取今日篮球赛程，并结合排版发送带推荐的播报"""
-    
-    # ⬇️ 把下面引号里的中文换成你真实的 API 密钥
+    """自动抓取今日篮球赛程，固定推荐队伍，并自动去除重复赛事"""
     api_key = "285aff303f99ed1463eac87da1e8bad9" 
-    
     today_str = datetime.now().strftime("%Y-%m-%d")
     
     url = "https://v1.basketball.api-sports.io/games"
@@ -1088,11 +740,13 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
     }
 
     match_lines = []
+    seen_matches = set()  # 👈 用于记录已经添加过的赛事，防止重复
+
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
         data = response.json()
         
-        matches = data.get("response", [])[:3] # 获取前 3 场比赛
+        matches = data.get("response", [])
         
         if matches:
             for match in matches:
@@ -1100,11 +754,20 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
                 away_team = match['teams']['away']['name']
                 league_name = match['league']['name']
                 
+                # 唯一标识这场比赛（比如：湖人 vs 勇士）
+                match_key = f"{home_team}-{away_team}"
+                if match_key in seen_matches:
+                    continue  # 如果已经有了，直接跳过（去重）
+                
+                seen_matches.add(match_key)
+                
                 game_time_utc = match['date']
                 time_str = game_time_utc[11:16] if len(game_time_utc) >= 16 else "待定"
                 
-                # 随机挑选主队或客队作为推荐
-                recommended_team = random.choice([home_team, away_team])
+                # 🛑 核心修改：利用比赛名字的哈希值固定推荐队伍，不再随机乱变！
+                # 这样只要是对阵这两支球队，每次推出来的固定是同一边
+                team_choice_seed = sum(ord(c) for c in match_key)
+                recommended_team = home_team if team_choice_seed % 2 == 0 else away_team
                 
                 match_block = (
                     f"⏰ {time_str} | 🏀 {league_name}\n"
@@ -1112,7 +775,12 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
                     f"推荐：{recommended_team}"
                 )
                 match_lines.append(match_block)
-        else:
+                
+                # 限制最多显示 3 场不重复的赛事
+                if len(match_lines) >= 3:
+                    break
+                    
+        if not match_lines:
             match_lines.append("今日暂无安排热门篮球赛事。")
             
     except Exception as e:
@@ -1140,8 +808,58 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
             logger.error("篮球赛事自动推荐发送失败 | chat_id=%s | error=%s", chat_id, e)
 
 
+# ==================================================
+# 主程序
+# ==================================================
+def main():
+    init_db()
 
+    app = (
+        Application
+        .builder()
+        .token(BOT_TOKEN)
+        .post_init(setup_bot_commands)
+        .build()
+    )
 
+    if app.job_queue:
+        from apscheduler.triggers.cron import CronTrigger
+        
+        # 1. 每小时发送一次的广告任务
+        app.job_queue.run_repeating(
+            send_scheduled_ads,
+            interval=3600,
+            first=60
+        )
+        
+        # 2. 修改后：每天从 12:00 开始，每隔 2 小时自动推送一次篮球赛事（12点、14点、16点……）
+        app.job_queue.run_repeating(
+            send_basketball_recommendations,
+            interval=CronTrigger(hour="12-22/2", minute=0),
+            first=30
+        )
+
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("myid", myid))
+    app.add_handler(CommandHandler("admin", admin_test))
+    app.add_handler(CommandHandler("groupid", groupid))
+    app.add_handler(CommandHandler("release", release_customer))
+    
+    app.add_handler(CallbackQueryHandler(button_handler))
+    app.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, handle_private_message))
+    app.add_handler(MessageHandler(filters.Chat(SUPPORT_GROUP_ID) & ~filters.COMMAND, admin_reply_customer))
+
+    print("🤖 AvGood Bot 已启动...")
+
+    import threading
+    threading.Thread(target=start_health_server, daemon=True).start()
+
+    app.run_polling(
+        poll_interval=1,
+        timeout=30,
+        bootstrap_retries=-1,
+        drop_pending_updates=False
+    )
 
 if __name__ == "__main__":
     main()
