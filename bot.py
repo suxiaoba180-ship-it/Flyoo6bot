@@ -479,29 +479,54 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if chat.type == "private" and args:
         param = args[0]
-        button_mapping = {
-            "register": ("📝 注册平台", "register.png", (
-                "🎉 福利已上线，早注册早领取！\n"
-                "现在加入T1体育，即可享受：\n\n"
-                "💰 首存彩金加码\n"
-                "🛡 专属包赔活动\n"
-                "⚽️ 热门赛事推荐\n"
-                "🎯 竞猜互动奖励\n"
-                "🎁 隐藏活动福利\n\n"
-                "注册时务必填写邀请码：\n"
-                "🔑 20001136\n\n"
-                "🌐 注册地址：\n"
-                "https://www.t1ty.top?agentId=20001136\n\n"
-                "永久防失联地址：\n"
-                "https://jully.pw"
-            )),
-            "newbie": ("🎁 新人彩金", "newbie.png", "🔥 新人专属福利已开启！首存立享彩金加码 + 包赔护航。"),
-            "checkin": ("📅 签到彩金", "checkin.png", "🚀 每日打卡签到，连续签到天数越多，签到彩金越丰厚！"),
-            "deposit": ("💰 日存彩金", "deposit.png", "🚀 每日首笔存款满300元即可参与【复存有礼】活动。"),
-            "invite": ("👥 推荐好礼", "invite.png", "🎉 分享您的专属邀请链接给好友，共同享受丰厚推荐返利！"),
-            "explore": ("🗺 探索秘境", "explore.png", "https://t.me/Avior96Bot\n\n@Avior96Bot"),
-        }
-
+            button_mapping = {
+        "register": ("📝 注册平台", "register.png", (
+            "🎉 福利已上线，早注册早领取！\n"
+            "现在加入T1体育，即可享受：\n\n"
+            "💰 首存彩金加码\n"
+            "🛡 专属包赔活动\n"
+            "⚽️ 热门赛事推荐\n"
+            "🎯 竞猜互动奖励\n"
+            "🎁 隐藏活动福利\n\n"
+            "注册时务必填写邀请码：\n"
+            "🔑 20001136\n\n"
+            "🌐 注册地址：\n"
+            "https://www.t1ty.top?agentId=20001136\n\n"
+            "永久防失联地址：\n"
+            "https://jully.pw\n\n"
+            "注册完成后私讯我，即可领取专属福利礼包🎁"
+        )),
+        "newbie": ("🎁 新人彩金", "newbie.png", (
+            "🔥 新人专属福利已开启！\n\n"
+            "首存立享彩金加码 + 包赔护航，更有内部群精选推荐、竞猜互动活动等你参与！\n"
+            "超多隐藏福利持续解锁中"
+        )),
+        "checkin": ("📅 签到彩金", "checkin.png", (
+            "🚀 签到就能领，错过就是少拿！\n\n"
+            "每日打卡签到，连续签到天数越多，签到彩金越丰厚！🎁\n\n"
+            "⏰ 每月1日重新累计，越早参与越划算！\n\n"
+            "回复：签到\n"
+            "即可马上为你申请福利"
+        )),
+        "deposit": ("💰 日存彩金", "deposit.png", (
+            "🚀 今天的福利别漏领！\n\n"
+            "每日首笔存款满300元即可参与【复存有礼】活动，额外礼金直接安排！\n"
+            "每天仅限领取一次，越早参与越划算！\n\n"
+            "回复：每日首存\n"
+            "马上为你申请，无需额外操作🎁"
+        )),
+        "invite": ("👥 推荐好礼", "invite.png", (
+            "🎉 输赢是比赛的一部分，福利才是真正不能错过的惊喜！\n\n"
+            "分享您的专属邀请链接给好友，共同享受丰厚推荐返利与好礼！\n\n"
+            "想了解活动详情或领取专属福利，欢迎随时私讯我，在线为你解答～ 🚀❤️"
+        )),
+        "explore": ("🗺 探索秘境", "explore.png", (
+            "欢迎来到秘境探索频道，点击开启您的奇妙旅程：\n"
+              "（这个功能尚未完善，将在本月底优化完成并上架）\n"          
+            "https://t.me/Avior96Bot\n\n"
+            "@Avior96Bot"
+        )),
+    }
         if param in button_mapping:
             name, img, text = button_mapping[param]
             await notify_customer_action(context, user, name)
@@ -1390,7 +1415,7 @@ def is_allowed_time():
     now = china_now()
     hour = now.hour
     minute = now.minute
-    allowed_hours = [8, 14, 16, 18, 20, 22, 0, 2, 4]
+    allowed_hours = [8, 14, 16, 18, 20, 22, 0]
     return hour in allowed_hours and 0 <= minute <= 5
 
 async def basketball_scheduler_task(context: ContextTypes.DEFAULT_TYPE):
