@@ -897,8 +897,23 @@ def translate_team(english_name):
 BASKETBALL_API_URL = "https://v1.basketball.api-sports.io"
 BASKETBALL_API_KEY = os.environ.get("BASKETBALL_API_KEY", "").strip()
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
-BASKETBALL_TOP_N = 3
+
+# 每次最多推荐 2 场
+BASKETBALL_TOP_N = 2
+
+# API 请求超时时间
 BASKETBALL_HTTP_TIMEOUT = 15.0
+
+# 至少要有 3 场有效近期比赛，才允许进入推荐
+BASKETBALL_MIN_RECENT_GAMES = 3
+
+# 近期球队数据缓存 6 小时
+# 同一球队 6 小时内不重复请求 API
+BASKETBALL_CACHE_TTL = 6 * 60 * 60
+
+# 免费 API 缓存
+BASKETBALL_TEAM_CACHE = {}
+BASKETBALL_H2H_CACHE = {}
 
 # API-Sports 的比赛状态中，这些状态不再视为“未来可推荐比赛”。
 BASKETBALL_FINISHED_STATUSES = {
@@ -1065,97 +1080,270 @@ def extract_game_result(game, team_id):
         "away_id": away.get("id"),
     }
 
+    async def fetch_team_recent_games(client, team_id):
+    """
+    获取球队最近比赛。
+    增加本地缓存，降低免费 API 请求次数。
+    """
 
-async def fetch_team_recent_games(client, team_id):
-    """获取球队最近比赛，并从中提取最近5场有效完赛数据（已移除免费版不支持的 last 参数）。"""
+    now = china_now()
+
+    # ==============================
+    # 1. 优先读取缓存
+    # ==============================
+    cached = BASKETBALL_TEAM_CACHE.get(team_id)
+
+    if cached:
+        cached_at, cached_games = cached
+
+        cache_age = (now - cached_at).total_seconds()
+
+        if cache_age < BASKETBALL_CACHE_TTL:
+            logger.info(
+                "使用球队缓存数据 | team_id=%s | age=%ss",
+                team_id,
+                int(cache_age)
+            )
+            return cached_games
+
+    # ==============================
+    # 2. API 获取
+    # ==============================
     try:
         games = await basketball_api_get(
             client,
             "/games",
-            {"team": team_id},
+            {
+                "team": team_id
+            }
         )
+
     except Exception as exc:
-        logger.warning("获取球队近期比赛失败 | team_id=%s | %s", team_id, exc)
+        logger.warning(
+            "获取球队近期比赛失败 | team_id=%s | %s",
+            team_id,
+            exc
+        )
+
+        # API 失败时，如果有旧缓存，继续使用旧缓存
+        if cached:
+            return cached[1]
+
         return []
 
-    now = china_now()
+    # ==============================
+    # 3. 提取已经结束的比赛
+    # ==============================
     completed = []
 
     for game in games:
-        game_dt = parse_api_datetime(game.get("date"))
-        if not game_dt or game_dt >= now:
+
+        game_dt = parse_api_datetime(
+            game.get("date")
+        )
+
+        if not game_dt:
             continue
 
-        result = extract_game_result(game, team_id)
+        if game_dt >= now:
+            continue
+
+        result = extract_game_result(
+            game,
+            team_id
+        )
+
         if not result:
             continue
 
         result["date"] = game_dt
+
         completed.append(result)
 
-    completed.sort(key=lambda item: item["date"], reverse=True)
-    return completed[:5]
+    # 最新比赛排前面
+    completed.sort(
+        key=lambda item: item["date"],
+        reverse=True
+    )
 
+    # 最多保留最近 5 场
+    completed = completed[:5]
+
+    # ==============================
+    # 4. 保存缓存
+    # ==============================
+    BASKETBALL_TEAM_CACHE[team_id] = (
+        now,
+        completed
+    )
+
+    logger.info(
+        "球队近期数据更新 | team_id=%s | games=%s",
+        team_id,
+        len(completed)
+    )
 
 async def fetch_head_to_head(client, home_id, away_id):
-    """获取双方历史交手，返回最近若干场可解析记录（已移除免费版不支持的 last 参数）。"""
+    """
+    H2H 仅作为辅助参考。
+    使用缓存，避免重复消耗免费 API 配额。
+    """
+
+    cache_key = tuple(
+        sorted(
+            (home_id, away_id)
+        )
+    )
+
+    now = china_now()
+
+    # ==============================
+    # 1. 读取缓存
+    # ==============================
+    cached = BASKETBALL_H2H_CACHE.get(
+        cache_key
+    )
+
+    if cached:
+
+        cached_at, cached_games = cached
+
+        cache_age = (
+            now - cached_at
+        ).total_seconds()
+
+        if cache_age < BASKETBALL_CACHE_TTL:
+
+            logger.info(
+                "使用 H2H 缓存 | teams=%s-%s",
+                home_id,
+                away_id
+            )
+
+            return cached_games
+
+    # ==============================
+    # 2. API 请求
+    # ==============================
     try:
+
         games = await basketball_api_get(
             client,
             "/games",
-            {"h2h": f"{home_id}-{away_id}"},
+            {
+                "h2h": f"{home_id}-{away_id}"
+            }
         )
+
     except Exception as exc:
+
         logger.warning(
-            "获取交手记录失败 | home_id=%s | away_id=%s | %s",
-            home_id, away_id, exc
+            "获取 H2H 失败 | home=%s | away=%s | %s",
+            home_id,
+            away_id,
+            exc
         )
+
+        if cached:
+            return cached[1]
+
         return []
 
-    now = china_now()
+    # ==============================
+    # 3. 解析历史交手
+    # ==============================
     completed = []
 
     for game in games:
-        game_dt = parse_api_datetime(game.get("date"))
-        if not game_dt or game_dt >= now:
+
+        game_dt = parse_api_datetime(
+            game.get("date")
+        )
+
+        if not game_dt:
             continue
 
-        home = (game.get("teams") or {}).get("home") or {}
-        away = (game.get("teams") or {}).get("away") or {}
-        scores = game.get("scores") or {}
-        hs = (scores.get("home") or {}).get("total")
-        aws = (scores.get("away") or {}).get("total")
+        if game_dt >= now:
+            continue
 
-        if hs is None or aws is None:
+        home = (
+            game.get("teams") or {}
+        ).get("home") or {}
+
+        away = (
+            game.get("teams") or {}
+        ).get("away") or {}
+
+        scores = (
+            game.get("scores") or {}
+        )
+
+        home_score = (
+            scores.get("home") or {}
+        ).get("total")
+
+        away_score = (
+            scores.get("away") or {}
+        ).get("total")
+
+        if home_score is None:
+            continue
+
+        if away_score is None:
             continue
 
         try:
-            hs, aws = float(hs), float(aws)
-        except (TypeError, ValueError):
+
+            home_score = float(
+                home_score
+            )
+
+            away_score = float(
+                away_score
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
             continue
 
-        if hs == aws:
+        if home_score == away_score:
             continue
 
-        winner = home.get("id") if hs > aws else away.get("id")
-        completed.append({
-            "date": game_dt,
-            "winner": winner,
-        })
+        winner = (
+            home.get("id")
+            if home_score > away_score
+            else away.get("id")
+        )
 
-    completed.sort(key=lambda item: item["date"], reverse=True)
-    return completed[:5]
+        completed.append(
+            {
+                "date": game_dt,
+                "winner": winner
+            }
+        )
 
+    completed.sort(
+        key=lambda item: item["date"],
+        reverse=True
+    )
 
-def summarize_recent(games):
-    if not games:
-        return {
-            "wins": 0,
-            "losses": 0,
-            "win_rate": 0.0,
-            "avg_points": 0.0,
-            "avg_allowed": 0.0,
-        }
+    completed = completed[:5]
+
+    # ==============================
+    # 4. 写入缓存
+    # ==============================
+    BASKETBALL_H2H_CACHE[
+        cache_key
+    ] = (
+        now,
+        completed
+    )
+
+    return completed
+    
+    return completed
 
     wins = sum(1 for item in games if item["result"] == "W")
     total = len(games)
@@ -1225,28 +1413,171 @@ def format_points(value):
 
 
 async def analyze_game(client, game):
+
     home_id = game["_home_id"]
     away_id = game["_away_id"]
 
     home_name_raw = game["_home_name"]
     away_name_raw = game["_away_name"]
-    
-    home = {"id": home_id, "name": translate_team(home_name_raw)}
-    away = {"id": away_id, "name": translate_team(away_name_raw)}
 
-    home_recent, away_recent, h2h = await __import__("asyncio").gather(
-        fetch_team_recent_games(client, home_id),
-        fetch_team_recent_games(client, away_id),
-        fetch_head_to_head(client, home_id, away_id),
+    home = {
+        "id": home_id,
+        "name": translate_team(
+            home_name_raw
+        )
+    }
+
+    away = {
+        "id": away_id,
+        "name": translate_team(
+            away_name_raw
+        )
+    }
+
+    # ==============================
+    # 获取数据
+    # ==============================
+    home_recent, away_recent, h2h = (
+        await __import__("asyncio").gather(
+            fetch_team_recent_games(
+                client,
+                home_id
+            ),
+            fetch_team_recent_games(
+                client,
+                away_id
+            ),
+            fetch_head_to_head(
+                client,
+                home_id,
+                away_id
+            )
+        )
     )
 
-    recommendation, home_score, away_score = calculate_recommendation(
-        home, away, home_recent, away_recent, h2h
+    # ==============================
+    # 数据不足 → 直接跳过
+    # ==============================
+    if (
+        len(home_recent)
+        < BASKETBALL_MIN_RECENT_GAMES
+    ):
+
+        logger.info(
+            "跳过比赛：主队近期数据不足 | %s | %s场",
+            home["name"],
+            len(home_recent)
+        )
+
+        return None
+
+    if (
+        len(away_recent)
+        < BASKETBALL_MIN_RECENT_GAMES
+    ):
+
+        logger.info(
+            "跳过比赛：客队近期数据不足 | %s | %s场",
+            away["name"],
+            len(away_recent)
+        )
+
+        return None
+
+    # ==============================
+    # 推荐计算
+    # ==============================
+    (
+        recommendation,
+        home_score,
+        away_score
+    ) = calculate_recommendation(
+        home,
+        away,
+        home_recent,
+        away_recent,
+        h2h
     )
 
-    home_summary = summarize_recent(home_recent)
-    away_summary = summarize_recent(away_recent)
+    if not recommendation:
+        return None
 
+    # ==============================
+    # 数据汇总
+    # ==============================
+    home_summary = summarize_recent(
+        home_recent
+    )
+
+    away_summary = summarize_recent(
+        away_recent
+    )
+
+    home_ha = home_away_summary(
+        home_recent,
+        home["id"],
+        True
+    )
+
+    away_ha = home_away_summary(
+        away_recent,
+        away["id"],
+        False
+    )
+
+    return {
+        "time": game["_china_datetime"].strftime(
+            "%H:%M"
+        ),
+
+        "home": home["name"],
+        "away": away["name"],
+
+        "recommendation": recommendation,
+
+        "home_recent_count": len(
+            home_recent
+        ),
+
+        "away_recent_count": len(
+            away_recent
+        ),
+
+        "home_wins": home_summary["wins"],
+        "home_losses": home_summary["losses"],
+
+        "away_wins": away_summary["wins"],
+        "away_losses": away_summary["losses"],
+
+        "home_win_rate": home_summary[
+            "win_rate"
+        ],
+
+        "away_win_rate": away_summary[
+            "win_rate"
+        ],
+
+        "home_avg_points": home_summary[
+            "avg_points"
+        ],
+
+        "away_avg_points": away_summary[
+            "avg_points"
+        ],
+
+        "home_ha_win_rate": home_ha[
+            "win_rate"
+        ],
+
+        "away_ha_win_rate": away_ha[
+            "win_rate"
+        ],
+
+        "h2h_count": len(h2h),
+
+        "home_score": home_score,
+        "away_score": away_score,
+    }
     return {
         "time": game["_china_datetime"].strftime("%H:%M"),
         "home": home["name"],
@@ -1262,24 +1593,115 @@ async def analyze_game(client, game):
 
 
 def format_basketball_message(analyses):
+
+    # ==============================
+    # 没有符合条件的赛事
+    # ==============================
     if not analyses:
-        return "🏀 今日篮球赛事数据分析\n\n今日暂无符合条件的未开赛篮球比赛。"
 
-    blocks = ["🏀 今日篮球赛事数据分析"]
+        return (
+            "🏀 今日篮球赛事精选\n\n"
+            "暂无符合数据条件赛事。"
+        )
 
-    for item in analyses[:BASKETBALL_TOP_N]:
+    blocks = [
+        "🏀 今日篮球赛事精选"
+    ]
+
+    for item in analyses[
+        :BASKETBALL_TOP_N
+    ]:
+
+        home_form = (
+            f"{item['home_wins']}胜"
+            f"{item['home_losses']}负"
+        )
+
+        away_form = (
+            f"{item['away_wins']}胜"
+            f"{item['away_losses']}负"
+        )
+
+        # ==============================
+        # 进攻表现
+        # ==============================
+        if (
+            item["home_avg_points"]
+            > item["away_avg_points"]
+        ):
+
+            attack_text = (
+                f"{item['home']}场均得分 "
+                f"{format_points(item['home_avg_points'])}，"
+                f"{item['away']}场均得分 "
+                f"{format_points(item['away_avg_points'])}。"
+                f"进攻数据参考上，"
+                f"{item['home']}略占优势。"
+            )
+
+        elif (
+            item["away_avg_points"]
+            > item["home_avg_points"]
+        ):
+
+            attack_text = (
+                f"{item['home']}场均得分 "
+                f"{format_points(item['home_avg_points'])}，"
+                f"{item['away']}场均得分 "
+                f"{format_points(item['away_avg_points'])}。"
+                f"进攻数据参考上，"
+                f"{item['away']}略占优势。"
+            )
+
+        else:
+
+            attack_text = (
+                f"{item['home']}与"
+                f"{item['away']}场均得分接近，"
+                "进攻数据参考上差距较小。"
+            )
+
+        # ==============================
+        # 最终模板
+        # ==============================
         blocks.append(
+
             f"⏰ 比赛时间：{item['time']}\n"
-            f"🔹 比赛队伍：{item['home']} vs {item['away']}\n"
-            f"🏆 推荐队伍：{item['recommendation']}\n"
-            "📊 数据分析：\n"
-            f"{item['home']}｜近5场胜率：{format_percent(item['home_win_rate'])}%｜"
-            f"场均得分：{format_points(item['home_avg_points'])}\n"
-            f"{item['away']}｜近5场胜率：{format_percent(item['away_win_rate'])}%｜"
-            f"场均得分：{format_points(item['away_avg_points'])}"
+
+            f"🔹 比赛队伍："
+            f"{item['home']} vs "
+            f"{item['away']}\n"
+
+            f"🎯 球队推荐："
+            f"{item['recommendation']}\n"
+
+            f"📊 近况参考：\n"
+
+            f"🔥 {item['home']}："
+            f"近{item['home_recent_count']}场 "
+            f"{home_form}，"
+            f"胜率 "
+            f"{format_percent(item['home_win_rate'])}%\n"
+
+            f"🔥 {item['away']}："
+            f"近{item['away_recent_count']}场 "
+            f"{away_form}，"
+            f"胜率 "
+            f"{format_percent(item['away_win_rate'])}%\n"
+
+            f"🔥 进攻表现："
+            f"{attack_text}\n"
+
+            "💡 综合参考："
+            "近期战绩、进攻表现为主要参考，"
+            "主客场与历史交手仅作辅助。\n"
+
+            "⚠️ 以上为赛事数据参考，"
+            "不代表比赛结果。"
         )
 
     return "\n\n".join(blocks)
+    
 async def test_basketball_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """管理员手动触发测试发送篮球赛事消息"""
     user = update.effective_user
@@ -1304,6 +1726,7 @@ async def test_basketball_manual(update: Update, context: ContextTypes.DEFAULT_T
                 for game in games:
                     try:
                         analyses.append(await analyze_game(client, game))
+                        
                     except Exception as exc:
                         logger.exception("篮球赛事分析失败 | game_id=%s | error=%s", game.get("id"), exc)
 
