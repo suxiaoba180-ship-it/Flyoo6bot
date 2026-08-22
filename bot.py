@@ -300,19 +300,18 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
 )
 
 def get_inline_keyboard():
-    bot_username = "Flyoo6bot"  # ⚠️ 把这几个字换成你机器人的英文用户名（不要加 @）
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📝 注册平台", url=f"https://t.me/{bot_username}?start=register"),
-            InlineKeyboardButton("🎁 新人彩金", url=f"https://t.me/{bot_username}?start=newbie")
+            InlineKeyboardButton("📝 注册平台", callback_data="register"),
+            InlineKeyboardButton("🎁 新人彩金", callback_data="newbie")
         ],
         [
-            InlineKeyboardButton("📅 签到彩金", url=f"https://t.me/{bot_username}?start=checkin"),
-            InlineKeyboardButton("💰 日存彩金", url=f"https://t.me/{bot_username}?start=deposit")
+            InlineKeyboardButton("📅 签到彩金", callback_data="checkin"),
+            InlineKeyboardButton("💰 日存彩金", callback_data="deposit")
         ],
         [
-            InlineKeyboardButton("👥 推荐好礼", url=f"https://t.me/{bot_username}?start=invite"),
-            InlineKeyboardButton("🗺 探索秘境", url=f"https://t.me/{bot_username}?start=explore")
+            InlineKeyboardButton("👥 推荐好礼", callback_data="invite"),
+            InlineKeyboardButton("🗺 探索秘境", callback_data="explore")
         ]
     ])
 
@@ -548,7 +547,6 @@ async def admin_test(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "你现在是这个机器人的管理员。"
     )
 
-
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     user = query.from_user
@@ -610,8 +608,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("ℹ️ 此客户已有管理员正在接待中", show_alert=True)
         return
 
-    await query.answer()
-
+    # 定义各个按钮对应的文本和图片内容
     button_mapping = {
         "register": ("📝 注册平台", "register.png", (
             "🎉 福利已上线，早注册早领取！\n"
@@ -635,11 +632,41 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "explore": ("🗺 探索秘境", "explore.png", "https://t.me/Avior96Bot\n\n@Avior96Bot"),
     }
 
-    if query.data in button_mapping:
-        name, img, text = button_mapping[query.data]
+    if data in button_mapping:
+        name, img, text = button_mapping[data]
+        
+        # 同步通知客服后台
         await notify_customer_action(context, user, name)
-        await send_feature_content(query, img, text)
 
+        bot_username = "Flyoo6bot"  # ⚠️ 请确保这里是你的机器人用户名（不要加 @）
+        
+        try:
+            # 尝试通过私聊发送图片或文本给用户
+            image_path = os.path.join(BASE_DIR, img)
+            if os.path.exists(image_path):
+                with open(image_path, "rb") as photo:
+                    await context.bot.send_photo(
+                        chat_id=user.id,
+                        photo=photo,
+                        caption=text,
+                        reply_markup=get_inline_keyboard()
+                    )
+            else:
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text=text,
+                    reply_markup=get_inline_keyboard()
+                )
+            
+            # 私发成功后，在群里弹出提示
+            await query.answer("✅ 已成功私发给您，请注意查收！", show_alert=True)
+            
+        except (Forbidden, TelegramError):
+            # 如果用户从未和机器人私聊过，Telegram 会报错，在这里捕获并提示
+            await query.answer(
+                f"❌ 发送失败！请先点击 @{bot_username} 给机器人发送一条消息（点击 Start），然后再来群里点按钮。",
+                show_alert=True
+            )
 
 async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
