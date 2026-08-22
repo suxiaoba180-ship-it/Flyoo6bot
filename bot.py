@@ -1449,7 +1449,7 @@ def main():
         app.job_queue.run_repeating(
             send_scheduled_ads,
             interval=3600,
-            first=60
+            first=5
         )
         
         # 2. 篮球推荐调度任务（每小时检查一次时间段）
