@@ -300,7 +300,7 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
 )
 
 def get_inline_keyboard():
-    bot_username = "@Flyoo6bot"  # ⚠️ 把这几个字换成你机器人的英文用户名（不要加 @）
+    bot_username = "Flyoo6bot"  # ⚠️ 把这几个字换成你机器人的英文用户名（不要加 @）
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📝 注册平台", url=f"https://t.me/{bot_username}?start=register"),
