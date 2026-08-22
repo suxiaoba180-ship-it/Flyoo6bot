@@ -483,8 +483,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "👇 您也可以直接使用下方固定键盘：",
             reply_markup=MAIN_REPLY_MARKUP
         )
-```[cite: 5]
-
 
 
 async def groupid(update: Update, context: ContextTypes.DEFAULT_TYPE):
