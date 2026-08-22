@@ -1179,7 +1179,44 @@ def format_basketball_message(analyses):
         )
 
     return "\n\n".join(blocks)
+async def test_basketball_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """管理员手动触发测试发送篮球赛事消息"""
+    user = update.effective_user
+    if not user or user.id != ADMIN_ID:
+        await update.message.reply_text("❌ 你没有权限执行此操作。")
+        return
 
+    await update.message.reply_text("🔄 正在手动获取篮球赛事并生成测试消息，请稍候...")
+    
+    if not BASKETBALL_API_KEY:
+        await update.message.reply_text("❌ 错误：未配置 BASKETBALL_API_KEY 环境变量。")
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=BASKETBALL_HTTP_TIMEOUT) as client:
+            games = await fetch_today_games(client)
+
+            if not games:
+                message_text = "🏀 今日篮球赛事数据分析（测试）\n\n今日暂无符合条件的未开赛篮球比赛（API正常连通）。"
+            else:
+                analyses = []
+                for game in games:
+                    try:
+                        analyses.append(await analyze_game(client, game))
+                    except Exception as exc:
+                        logger.exception("篮球赛事分析失败 | game_id=%s | error=%s", game.get("id"), exc)
+
+                message_text = "【测试推送】\n" + format_basketball_message(analyses)
+
+        await update.message.reply_text(
+            text=message_text,
+            reply_markup=get_inline_keyboard(),
+        )
+        logger.info("手动触发篮球测试消息发送成功 | user_id=%s", user.id)
+
+    except Exception as exc:
+        logger.exception("手动触发篮球测试异常：%s", exc)
+        await update.message.reply_text(f"❌ 测试发送失败，发生异常：{exc}")
 
 async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
     if not BASKETBALL_API_KEY:
@@ -1275,6 +1312,7 @@ def main():
     app.add_handler(CommandHandler("myid", myid))
     app.add_handler(CommandHandler("admin", admin_test))
     app.add_handler(CommandHandler("groupid", groupid))
+    app.add_handler(CommandHandler("test_basketball", test_basketball_manual))
     app.add_handler(CommandHandler("release", release_customer))
     
     app.add_handler(CallbackQueryHandler(button_handler))
