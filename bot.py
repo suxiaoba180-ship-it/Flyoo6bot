@@ -1080,7 +1080,7 @@ def extract_game_result(game, team_id):
         "away_id": away.get("id"),
     }
 
-    async def fetch_team_recent_games(client, team_id):
+async def fetch_team_recent_games(client, team_id):
     """
     获取球队最近比赛。
     增加本地缓存，降低免费 API 请求次数。
@@ -1340,15 +1340,42 @@ async def fetch_head_to_head(client, home_id, away_id):
         now,
         completed
     )
-
-    return completed
-    
     return completed
 
-    wins = sum(1 for item in games if item["result"] == "W")
+
+def summarize_recent(games):
+    if not games:
+        return {
+            "wins": 0,
+            "losses": 0,
+            "win_rate": 0.0,
+            "avg_points": 0.0,
+            "avg_allowed": 0.0,
+        }
+
+    wins = sum(
+        1
+        for item in games
+        if item["result"] == "W"
+    )
+
     total = len(games)
-    avg_points = sum(item["points_for"] for item in games) / total
-    avg_allowed = sum(item["points_against"] for item in games) / total
+
+    avg_points = (
+        sum(
+            item["points_for"]
+            for item in games
+        )
+        / total
+    )
+
+    avg_allowed = (
+        sum(
+            item["points_against"]
+            for item in games
+        )
+        / total
+    )
 
     return {
         "wins": wins,
@@ -1358,50 +1385,151 @@ async def fetch_head_to_head(client, home_id, away_id):
         "avg_allowed": avg_allowed,
     }
 
-
 def home_away_summary(games, team_id, want_home):
     filtered = [
         item for item in games
         if (item.get("home_id") == team_id) == want_home
     ]
     return summarize_recent(filtered[:5])
+def calculate_recommendation(
+    home,
+    away,
+    home_recent,
+    away_recent,
+    h2h
+):
+    """
+    免费 API 友好型推荐算法。
 
+    核心：
+    - 近期战绩 45%
+    - 进攻表现 35%
 
-def calculate_recommendation(home, away, home_recent, away_recent, h2h):
+    辅助：
+    - 主客场 10%
+    - H2H 10%
+
+    数据不足由 analyze_game() 负责跳过。
+    """
+
     home_sum = summarize_recent(home_recent)
     away_sum = summarize_recent(away_recent)
 
     home_score = 0.0
     away_score = 0.0
 
-    home_score += home_sum["win_rate"] * 0.40
-    away_score += away_sum["win_rate"] * 0.40
+    # ==================================
+    # 1. 近期战绩：45%
+    # ==================================
+    home_score += (
+        home_sum["win_rate"] * 0.45
+    )
 
-    max_points = max(home_sum["avg_points"], away_sum["avg_points"], 1.0)
-    home_score += home_sum["avg_points"] / max_points * 100 * 0.25
-    away_score += away_sum["avg_points"] / max_points * 100 * 0.25
+    away_score += (
+        away_sum["win_rate"] * 0.45
+    )
 
-    max_allowed = max(home_sum["avg_allowed"], away_sum["avg_allowed"], 1.0)
-    home_score += (1 - home_sum["avg_allowed"] / max_allowed) * 100 * 0.15
-    away_score += (1 - away_sum["avg_allowed"] / max_allowed) * 100 * 0.15
+    # ==================================
+    # 2. 进攻表现：35%
+    # ==================================
+    max_points = max(
+        home_sum["avg_points"],
+        away_sum["avg_points"],
+        1.0
+    )
 
-    home_ha = home_away_summary(home_recent, home["id"], True)
-    away_ha = home_away_summary(away_recent, away["id"], False)
+    home_score += (
+        home_sum["avg_points"]
+        / max_points
+        * 100
+        * 0.35
+    )
 
-    home_score += home_ha["win_rate"] * 0.10
-    away_score += away_ha["win_rate"] * 0.10
+    away_score += (
+        away_sum["avg_points"]
+        / max_points
+        * 100
+        * 0.35
+    )
 
+    # ==================================
+    # 3. 主客场：10%
+    # 仅作为辅助
+    # ==================================
+    home_ha = home_away_summary(
+        home_recent,
+        home["id"],
+        True
+    )
+
+    away_ha = home_away_summary(
+        away_recent,
+        away["id"],
+        False
+    )
+
+    home_score += (
+        home_ha["win_rate"] * 0.10
+    )
+
+    away_score += (
+        away_ha["win_rate"] * 0.10
+    )
+
+    # ==================================
+    # 4. H2H：10%
+    # 仅作为辅助
+    # ==================================
     if h2h:
-        h2h_home_wins = sum(1 for item in h2h if item["winner"] == home["id"])
-        h2h_away_wins = sum(1 for item in h2h if item["winner"] == away["id"])
-        total_h2h = h2h_home_wins + h2h_away_wins
-        if total_h2h:
-            home_score += (h2h_home_wins / total_h2h * 100) * 0.10
-            away_score += (h2h_away_wins / total_h2h * 100) * 0.10
 
+        home_h2h_wins = sum(
+            1
+            for item in h2h
+            if item["winner"] == home["id"]
+        )
+
+        away_h2h_wins = sum(
+            1
+            for item in h2h
+            if item["winner"] == away["id"]
+        )
+
+        total_h2h = (
+            home_h2h_wins
+            + away_h2h_wins
+        )
+
+        if total_h2h:
+
+            home_score += (
+                home_h2h_wins
+                / total_h2h
+                * 100
+                * 0.10
+            )
+
+            away_score += (
+                away_h2h_wins
+                / total_h2h
+                * 100
+                * 0.10
+            )
+
+    # ==================================
+    # 最终推荐
+    # ==================================
     if home_score >= away_score:
-        return home["name"], home_score, away_score
-    return away["name"], home_score, away_score
+        return (
+            home["name"],
+            home_score,
+            away_score
+        )
+
+    return (
+        away["name"],
+        home_score,
+        away_score
+    )
 
 
 def format_percent(value):
@@ -1578,18 +1706,6 @@ async def analyze_game(client, game):
         "home_score": home_score,
         "away_score": away_score,
     }
-    return {
-        "time": game["_china_datetime"].strftime("%H:%M"),
-        "home": home["name"],
-        "away": away["name"],
-        "recommendation": recommendation,
-        "home_win_rate": home_summary["win_rate"],
-        "home_avg_points": home_summary["avg_points"],
-        "away_win_rate": away_summary["win_rate"],
-        "away_avg_points": away_summary["avg_points"],
-        "home_score": home_score,
-        "away_score": away_score,
-    }
 
 
 def format_basketball_message(analyses):
@@ -1725,7 +1841,8 @@ async def test_basketball_manual(update: Update, context: ContextTypes.DEFAULT_T
                 analyses = []
                 for game in games:
                     try:
-                        analyses.append(await analyze_game(client, game))
+                        result = await analyze_game(client,game)
+                        if result: analyses.append(result)
                         
                     except Exception as exc:
                         logger.exception("篮球赛事分析失败 | game_id=%s | error=%s", game.get("id"), exc)
@@ -1757,7 +1874,8 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
                 analyses = []
                 for game in games:
                     try:
-                        analyses.append(await analyze_game(client, game))
+                        result = await analyze_game(client,game)
+                        if result:analyses.append(result)
                     except Exception as exc:
                         logger.exception(
                             "篮球赛事分析失败 | game_id=%s | error=%s",
