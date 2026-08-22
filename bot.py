@@ -6,6 +6,7 @@ import asyncio
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, HTTPServer
+import json
 
 import httpx
 
@@ -39,10 +40,9 @@ BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_ID = 7708695986
 
 # ==================================================
-# 客服群 ID（请确保这里是你的真实群 ID）
+# 客服群 ID
 # ==================================================
 SUPPORT_GROUP_ID = -1003749620184
-# 客户话题与客服接待状态全部由 SQLite 持久化。
 
 # ==================================================
 # 客服系统持久化数据库
@@ -190,7 +190,6 @@ def release_customer_agent_db(customer_id):
         )
         conn.commit()
 
-import json
 
 def get_db_cache(cache_key: str):
     """从数据库账本里查缓存"""
@@ -209,7 +208,6 @@ def get_db_cache(cache_key: str):
                 cached_at = cached_at.replace(tzinfo=timezone.utc)
             
             cache_age = (china_now() - cached_at).total_seconds()
-            # 6小时内有效
             if cache_age < BASKETBALL_CACHE_TTL:
                 return json.loads(row["data"])
         except Exception:
@@ -352,9 +350,7 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
 )
 
 def get_inline_keyboard():
-    # ⚠️ 请把下面的 Flyoo6bot 换成你自己的机器人用户名（不要加 @）
     bot_username = "Flyoo6bot" 
-    
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📝 注册平台", url=f"https://t.me/{bot_username}?start=register"),
@@ -479,10 +475,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     args = context.args  
 
-    # 如果用户是从群里点击按钮跳进私聊的，就直接私发对应内容
     if chat.type == "private" and args:
         param = args[0]
-        
         button_mapping = {
             "register": ("📝 注册平台", "register.png", (
                 "🎉 福利已上线，早注册早领取！\n"
@@ -512,7 +506,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await send_feature_content(update, img, text)
             return
 
-    # 普通的欢迎语（直接点机器人时显示）
     welcome_text = (
         "👋 欢迎来到T1体育平台！\n\n"
         "🔥 请直接在对话框发送消息咨询，或点击下方按钮选择您需要体验的服务："
@@ -663,7 +656,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer("ℹ️ 此客户已有管理员正在接待中", show_alert=True)
         return
 
-    # 定义各个按钮对应的文本和图片内容
     button_mapping = {
         "register": ("📝 注册平台", "register.png", (
             "🎉 福利已上线，早注册早领取！\n"
@@ -689,14 +681,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data in button_mapping:
         name, img, text = button_mapping[data]
-        
-        # 同步通知客服后台
         await notify_customer_action(context, user, name)
-
-        bot_username = "Flyoo6bot"  # ⚠️ 请确保这里是你的机器人用户名（不要加 @）
+        bot_username = "Flyoo6bot"
         
         try:
-            # 尝试通过私聊发送图片或文本给用户
             image_path = os.path.join(BASE_DIR, img)
             if os.path.exists(image_path):
                 with open(image_path, "rb") as photo:
@@ -712,14 +700,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     text=text,
                     reply_markup=get_inline_keyboard()
                 )
-            
-            # 私发成功后，在群里弹出提示
             await query.answer("✅ 已成功私发给您，请注意查收！", show_alert=True)
-            
         except (Forbidden, TelegramError):
-            # 如果用户从未和机器人私聊过，Telegram 会报错，在这里捕获并提示
             await query.answer(
-                f"❌ 发送失败！请先点击 @{bot_username} 给机器人发送一条消息（点击 Start），然后再来群里点按钮。",
+                f"❌ 发送失败！请先点击 @{bot_username} 给机器人发送一条消息，然后再来群里点按钮。",
                 show_alert=True
             )
 
@@ -737,7 +721,6 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     if update.effective_chat.type != "private":
         return
 
-    text = message.text or ""
     topic_id = await ensure_customer_topic(context, user)
     if not topic_id:
         return
@@ -846,16 +829,13 @@ def start_health_server():
     server.serve_forever()
 
 # ==================================================
-# 超全球队中英文对照字典（含 NBA、欧洲欧冠豪门、国际国家队）
+# 球队中英文对照字典
 # ==================================================
 TEAM_NAME_ZH = {
-    # --- 常见测试与东南亚队伍 ---
     "Binan Tatak Gel": "比南塔塔克",
     "San Juan Knights": "圣胡安骑士",
     "Nhatrang Dolphins": "芽庄海豚",
     "Da Nang Dragons": "岘港龙",
-
-    # --- NBA 东部联盟 (15支) ---
     "Boston Celtics": "波士顿凯尔特人",
     "Brooklyn Nets": "布鲁克林篮网",
     "New York Knicks": "纽约尼克斯",
@@ -871,8 +851,6 @@ TEAM_NAME_ZH = {
     "Miami Heat": "迈阿密热火",
     "Orlando Magic": "奥兰多魔术",
     "Washington Wizards": "华盛顿奇才",
-
-    # --- NBA 西部联盟 (15支) ---
     "Denver Nuggets": "丹佛掘金",
     "Minnesota Timberwolves": "明尼苏达森林狼",
     "Oklahoma City Thunder": "俄克拉荷马城雷霆",
@@ -888,102 +866,39 @@ TEAM_NAME_ZH = {
     "Memphis Grizzlies": "孟菲斯灰熊",
     "New Orleans Pelicans": "新奥尔良鹈鹕",
     "San Antonio Spurs": "圣安东尼奥马刺",
-
-    # --- 欧洲篮球联赛 (EuroLeague 常见豪门) ---
-    "Real Madrid": "皇家马德里",
-    "FC Barcelona": "巴塞罗那",
-    "Anadolu Efes": "安纳托利亚艾菲斯",
-    "Anadolu Efes Istanbul": "伊斯坦布尔艾菲斯",
-    "Fenerbahce": "费内巴切",
-    "Fenerbahce Beko Istanbul": "费内巴切",
-    "Olympiacos": "奥林匹亚科斯",
-    "Olympiacos Piraeus": "奥林匹亚科斯",
-    "Panathinaikos": "帕纳辛纳科斯",
-    "Panathinaikos AKTOR Athens": "帕纳辛纳科斯",
-    "Monaco": "摩纳哥",
-    "AS Monaco": "摩纳哥",
-    "FC Bayern Munich": "拜仁慕尼黑",
-    "Armani Olimpia Milan": "米兰阿玛尼",
-    "Virtus Bologna": "博洛尼亚维图斯",
-    "Crvena Zvezda": "贝尔格莱德红星",
-    "Crvena Zvezda Meridianbet Belgrade": "贝尔格莱德红星",
-    "Partizan": "贝尔格莱德游击",
-    "Partizan Mozzart Bet Belgrade": "贝尔格莱德游击",
-    "Maccabi Tel Aviv": "特拉维夫马卡比",
-    "Baskonia": "巴斯克尼亚",
-    "Kosner Baskonia Vitoria-Gasteiz": "巴斯克尼亚",
-    "Zalgiris Kaunas": "考纳斯扎尔吉里斯",
-    "ALBA Berlin": "柏林阿尔巴",
-    "Paris Basketball": "巴黎篮球",
-
-    # --- 常见国家队 ---
-    "China": "中国",
-    "USA": "美国",
-    "Spain": "西班牙",
-    "France": "法国",
-    "Serbia": "塞尔维亚",
-    "Australia": "澳大利亚",
-    "Canada": "加拿大",
-    "Germany": "德国",
-    "Turkey": "土耳其",
-    "Czech Republic": "捷克",
-    "Greece": "希腊",
-    "Italy": "意大利",
-    "Lithuania": "立陶宛",
-    "Argentina": "阿根廷",
-    "Brazil": "巴西",
-    "Japan": "日本",
-    "South Korea": "韩国",
-    "Philippines": "菲律宾",
 }
 
 def translate_team(english_name):
-    """将英文球队名翻译为中文，如果字典里没有则返回原英文"""
     if not english_name:
         return "未知球队"
     return TEAM_NAME_ZH.get(english_name.strip(), english_name)
 
 # ============================================================
-# 自动抓取篮球赛事与数据分析任务
+# 篮球赛事配置与抓取
 # ============================================================
 BASKETBALL_API_URL = "https://v1.basketball.api-sports.io"
 BASKETBALL_API_KEY = os.environ.get("BASKETBALL_API_KEY", "").strip()
 CHINA_TZ = ZoneInfo("Asia/Shanghai")
 
-# 每次最多推荐 2 场
 BASKETBALL_TOP_N = 2
-
-# API 请求超时时间
 BASKETBALL_HTTP_TIMEOUT = 15.0
-
-# 至少要有 3 场有效近期比赛，才允许进入推荐
 BASKETBALL_MIN_RECENT_GAMES = 3
-
-# 近期球队数据缓存 6 小时
-# 同一球队 6 小时内不重复请求 API
 BASKETBALL_CACHE_TTL = 6 * 60 * 60
 
-# 免费 API 缓存
 BASKETBALL_TEAM_CACHE = {}
 BASKETBALL_H2H_CACHE = {}
 
-# API-Sports 的比赛状态中，这些状态不再视为“未来可推荐比赛”。
 BASKETBALL_FINISHED_STATUSES = {
     "FT", "AOT", "CANC", "ABD", "AWD", "WO", "POST", "PST", "LIVE", "Q1",
     "Q2", "Q3", "Q4", "OT", "HT", "INT", "BT", "SUSP"
 }
 
-
 def china_now():
-    """返回中国大陆当前时间。"""
     return datetime.now(CHINA_TZ)
 
-
 def parse_api_datetime(value):
-    """把 API 返回的比赛时间转换为北京时间。"""
     if not value:
         return None
-
     raw = str(value).strip()
     try:
         dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
@@ -992,71 +907,50 @@ def parse_api_datetime(value):
             dt = datetime.strptime(raw[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
         except ValueError:
             return None
-
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
-
     return dt.astimezone(CHINA_TZ)
-
 
 def normalize_game_status(game):
     status = game.get("status") or {}
     return str(status.get("short") or status.get("long") or "").upper().strip()
 
-
 def is_future_game(game, now=None):
-    """只保留尚未开始的比赛。"""
     now = now or china_now()
     game_dt = parse_api_datetime(game.get("date"))
     if not game_dt:
         return False
-
     status = normalize_game_status(game)
-
     if status in BASKETBALL_FINISHED_STATUSES:
         return False
-
     return game_dt > now
-
 
 def get_team_info(game, side):
     teams = game.get("teams") or {}
     team = teams.get(side) or {}
-    team_id = team.get("id")
-    team_name = team.get("name") or "未知球队"
-    return team_id, team_name
-
+    return team.get("id"), team.get("name") or "未知球队"
 
 async def basketball_api_get(client, endpoint, params):
-    """统一请求 API-Sports，并处理常见 API/网络错误。"""
     if not BASKETBALL_API_KEY:
         raise RuntimeError("未配置 BASKETBALL_API_KEY 环境变量")
-
     url = f"{BASKETBALL_API_URL}{endpoint}"
     headers = {"x-apisports-key": BASKETBALL_API_KEY}
-
     response = await client.get(url, headers=headers, params=params)
     if response.status_code == 429:
         raise RuntimeError("篮球 API 请求过于频繁（429）")
     response.raise_for_status()
-
     try:
         payload = response.json()
     except ValueError as exc:
         raise RuntimeError("篮球 API 返回内容不是有效 JSON") from exc
-
     errors = payload.get("errors")
     if errors:
         raise RuntimeError(f"篮球 API 返回错误：{errors}")
-
     return payload.get("response") or []
 
-
 async def fetch_today_games(client):
-    """获取当天赛程，并筛出未来比赛。"""
     today = china_now().date().isoformat()
     games = await basketball_api_get(client, "/games", {"date": today})
-
     now = china_now()
     selected = []
     seen = set()
@@ -1071,11 +965,7 @@ async def fetch_today_games(client):
         if not is_future_game(game, now):
             continue
 
-        key = game_id or (
-            home_id,
-            away_id,
-            game.get("date"),
-        )
+        key = game_id or (home_id, away_id, game.get("date"))
         if key in seen:
             continue
         seen.add(key)
@@ -1090,12 +980,9 @@ async def fetch_today_games(client):
     selected.sort(key=lambda item: item["_china_datetime"])
     return selected
 
-
 def extract_game_result(game, team_id):
-    """从一场已完成比赛中提取指定球队的得分和胜负。"""
     teams = game.get("teams") or {}
     scores = game.get("scores") or {}
-
     home = teams.get("home") or {}
     away = teams.get("away") or {}
     home_score = (scores.get("home") or {}).get("total")
@@ -1103,7 +990,6 @@ def extract_game_result(game, team_id):
 
     if home_score is None or away_score is None:
         return None
-
     try:
         home_score = float(home_score)
         away_score = float(away_score)
@@ -1117,13 +1003,7 @@ def extract_game_result(game, team_id):
     else:
         return None
 
-    if points_for > points_against:
-        result = "W"
-    elif points_for < points_against:
-        result = "L"
-    else:
-        result = "D"
-
+    result = "W" if points_for > points_against else ("L" if points_for < points_against else "D")
     return {
         "result": result,
         "points_for": points_for,
@@ -1133,303 +1013,86 @@ def extract_game_result(game, team_id):
     }
 
 async def fetch_team_recent_games(client, team_id):
-    """
-    获取球队最近比赛。
-    增加本地缓存，降低免费 API 请求次数。
-    """
+    cache_key = f"team_recent_{team_id}"
+    cached_data = get_db_cache(cache_key)
+    if cached_data:
+        for item in cached_data:
+            if isinstance(item.get("date"), str):
+                item["date"] = datetime.fromisoformat(item["date"])
+        return cached_data
 
-    now = china_now()
-
-    # ==============================
-    # 1. 优先读取缓存
-    # ==============================
-    cached = BASKETBALL_TEAM_CACHE.get(team_id)
-
-    if cached:
-        cached_at, cached_games = cached
-
-        cache_age = (now - cached_at).total_seconds()
-
-        if cache_age < BASKETBALL_CACHE_TTL:
-            logger.info(
-                "使用球队缓存数据 | team_id=%s | age=%ss",
-                team_id,
-                int(cache_age)
-            )
-            return cached_games
-
-    # ==============================
-    # 2. API 获取
-    # ==============================
     try:
-        games = await basketball_api_get(
-            client,
-            "/games",
-            {
-                "team": team_id
-            }
-        )
-
+        games = await basketball_api_get(client, "/games", {"team": team_id})
     except Exception as exc:
-        logger.warning(
-            "获取球队近期比赛失败 | team_id=%s | %s",
-            team_id,
-            exc
-        )
-
-        # API 失败时，如果有旧缓存，继续使用旧缓存
-        if cached:
-            return cached[1]
-
+        logger.warning("获取球队近期比赛失败 | team_id=%s | %s", team_id, exc)
         return []
 
-    # ==============================
-    # 3. 提取已经结束的比赛
-    # ==============================
     completed = []
-
+    now = china_now()
     for game in games:
-
-        game_dt = parse_api_datetime(
-            game.get("date")
-        )
-
-        if not game_dt:
+        game_dt = parse_api_datetime(game.get("date"))
+        if not game_dt or game_dt >= now:
             continue
-
-        if game_dt >= now:
-            continue
-
-        result = extract_game_result(
-            game,
-            team_id
-        )
-
+        result = extract_game_result(game, team_id)
         if not result:
             continue
-
         result["date"] = game_dt
-
         completed.append(result)
 
-    # 最新比赛排前面
-    completed.sort(
-        key=lambda item: item["date"],
-        reverse=True
-    )
-
-    # 最多保留最近 5 场
+    completed.sort(key=lambda item: item["date"], reverse=True)
     completed = completed[:5]
-
-    # ==============================
-    # 4. 保存缓存
-    # ==============================
-    BASKETBALL_TEAM_CACHE[team_id] = (
-        now,
-        completed
-    )
-
-    logger.info(
-        "球队近期数据更新 | team_id=%s | games=%s",
-        team_id,
-        len(completed)
-    )
+    set_db_cache(cache_key, completed)
     return completed
 
 async def fetch_head_to_head(client, home_id, away_id):
-    """
-    H2H 仅作为辅助参考。
-    使用缓存，避免重复消耗免费 API 配额。
-    """
+    cache_key = tuple(sorted((home_id, away_id)))
+    db_key = f"h2h_{home_id}_{away_id}"
+    cached_data = get_db_cache(db_key)
+    if cached_data:
+        for item in cached_data:
+            if isinstance(item.get("date"), str):
+                item["date"] = datetime.fromisoformat(item["date"])
+        return cached_data
 
-    cache_key = tuple(
-        sorted(
-            (home_id, away_id)
-        )
-    )
-
-    now = china_now()
-
-    # ==============================
-    # 1. 读取缓存
-    # ==============================
-    cached = BASKETBALL_H2H_CACHE.get(
-        cache_key
-    )
-
-    if cached:
-
-        cached_at, cached_games = cached
-
-        cache_age = (
-            now - cached_at
-        ).total_seconds()
-
-        if cache_age < BASKETBALL_CACHE_TTL:
-
-            logger.info(
-                "使用 H2H 缓存 | teams=%s-%s",
-                home_id,
-                away_id
-            )
-
-            return cached_games
-
-    # ==============================
-    # 2. API 请求
-    # ==============================
     try:
-
-        games = await basketball_api_get(
-            client,
-            "/games",
-            {
-                "h2h": f"{home_id}-{away_id}"
-            }
-        )
-
+        games = await basketball_api_get(client, "/games", {"h2h": f"{home_id}-{away_id}"})
     except Exception as exc:
-
-        logger.warning(
-            "获取 H2H 失败 | home=%s | away=%s | %s",
-            home_id,
-            away_id,
-            exc
-        )
-
-        if cached:
-            return cached[1]
-
+        logger.warning("获取 H2H 失败 | home=%s | away=%s | %s", home_id, away_id, exc)
         return []
 
-    # ==============================
-    # 3. 解析历史交手
-    # ==============================
     completed = []
-
+    now = china_now()
     for game in games:
-
-        game_dt = parse_api_datetime(
-            game.get("date")
-        )
-
-        if not game_dt:
+        game_dt = parse_api_datetime(game.get("date"))
+        if not game_dt or game_dt >= now:
             continue
-
-        if game_dt >= now:
+        home = (game.get("teams") or {}).get("home") or {}
+        scores = game.get("scores") or {}
+        home_score = (scores.get("home") or {}).get("total")
+        away_score = (scores.get("away") or {}).get("total")
+        if home_score is None or away_score is None:
             continue
-
-        home = (
-            game.get("teams") or {}
-        ).get("home") or {}
-
-        away = (
-            game.get("teams") or {}
-        ).get("away") or {}
-
-        scores = (
-            game.get("scores") or {}
-        )
-
-        home_score = (
-            scores.get("home") or {}
-        ).get("total")
-
-        away_score = (
-            scores.get("away") or {}
-        ).get("total")
-
-        if home_score is None:
-            continue
-
-        if away_score is None:
-            continue
-
         try:
-
-            home_score = float(
-                home_score
-            )
-
-            away_score = float(
-                away_score
-            )
-
-        except (
-            TypeError,
-            ValueError
-        ):
+            home_score, away_score = float(home_score), float(away_score)
+        except (TypeError, ValueError):
             continue
-
         if home_score == away_score:
             continue
+        winner = home.get("id") if home_score > away_score else away.get("id")
+        completed.append({"date": game_dt, "winner": winner})
 
-        winner = (
-            home.get("id")
-            if home_score > away_score
-            else away.get("id")
-        )
-
-        completed.append(
-            {
-                "date": game_dt,
-                "winner": winner
-            }
-        )
-
-    completed.sort(
-        key=lambda item: item["date"],
-        reverse=True
-    )
-
+    completed.sort(key=lambda item: item["date"], reverse=True)
     completed = completed[:5]
-
-    # ==============================
-    # 4. 写入缓存
-    # ==============================
-    BASKETBALL_H2H_CACHE[
-        cache_key
-    ] = (
-        now,
-        completed
-    )
+    set_db_cache(db_key, completed)
     return completed
-
 
 def summarize_recent(games):
     if not games:
-        return {
-            "wins": 0,
-            "losses": 0,
-            "win_rate": 0.0,
-            "avg_points": 0.0,
-            "avg_allowed": 0.0,
-        }
-
-    wins = sum(
-        1
-        for item in games
-        if item["result"] == "W"
-    )
-
+        return {"wins": 0, "losses": 0, "win_rate": 0.0, "avg_points": 0.0, "avg_allowed": 0.0}
+    wins = sum(1 for item in games if item["result"] == "W")
     total = len(games)
-
-    avg_points = (
-        sum(
-            item["points_for"]
-            for item in games
-        )
-        / total
-    )
-
-    avg_allowed = (
-        sum(
-            item["points_against"]
-            for item in games
-        )
-        / total
-    )
-
+    avg_points = sum(item["points_for"] for item in games) / total
+    avg_allowed = sum(item["points_against"] for item in games) / total
     return {
         "wins": wins,
         "losses": total - wins,
@@ -1439,445 +1102,125 @@ def summarize_recent(games):
     }
 
 def home_away_summary(games, team_id, want_home):
-    filtered = [
-        item for item in games
-        if (item.get("home_id") == team_id) == want_home
-    ]
+    filtered = [item for item in games if (item.get("home_id") == team_id) == want_home]
     return summarize_recent(filtered[:5])
-def calculate_recommendation(
-    home,
-    away,
-    home_recent,
-    away_recent,
-    h2h
-):
-    """
-    免费 API 友好型推荐算法。
 
-    核心：
-    - 近期战绩 45%
-    - 进攻表现 35%
-
-    辅助：
-    - 主客场 10%
-    - H2H 10%
-
-    数据不足由 analyze_game() 负责跳过。
-    """
-
+def calculate_recommendation(home, away, home_recent, away_recent, h2h):
     home_sum = summarize_recent(home_recent)
     away_sum = summarize_recent(away_recent)
+    home_score, away_score = 0.0, 0.0
 
-    home_score = 0.0
-    away_score = 0.0
+    home_score += home_sum["win_rate"] * 0.45
+    away_score += away_sum["win_rate"] * 0.45
 
-    # ==================================
-    # 1. 近期战绩：45%
-    # ==================================
-    home_score += (
-        home_sum["win_rate"] * 0.45
-    )
+    max_points = max(home_sum["avg_points"], away_sum["avg_points"], 1.0)
+    home_score += home_sum["avg_points"] / max_points * 100 * 0.35
+    away_score += away_sum["avg_points"] / max_points * 100 * 0.35
 
-    away_score += (
-        away_sum["win_rate"] * 0.45
-    )
+    home_ha = home_away_summary(home_recent, home["id"], True)
+    away_ha = home_away_summary(away_recent, away["id"], False)
+    home_score += home_ha["win_rate"] * 0.10
+    away_score += away_ha["win_rate"] * 0.10
 
-    # ==================================
-    # 2. 进攻表现：35%
-    # ==================================
-    max_points = max(
-        home_sum["avg_points"],
-        away_sum["avg_points"],
-        1.0
-    )
-
-    home_score += (
-        home_sum["avg_points"]
-        / max_points
-        * 100
-        * 0.35
-    )
-
-    away_score += (
-        away_sum["avg_points"]
-        / max_points
-        * 100
-        * 0.35
-    )
-
-    # ==================================
-    # 3. 主客场：10%
-    # 仅作为辅助
-    # ==================================
-    home_ha = home_away_summary(
-        home_recent,
-        home["id"],
-        True
-    )
-
-    away_ha = home_away_summary(
-        away_recent,
-        away["id"],
-        False
-    )
-
-    home_score += (
-        home_ha["win_rate"] * 0.10
-    )
-
-    away_score += (
-        away_ha["win_rate"] * 0.10
-    )
-
-    # ==================================
-    # 4. H2H：10%
-    # 仅作为辅助
-    # ==================================
     if h2h:
-
-        home_h2h_wins = sum(
-            1
-            for item in h2h
-            if item["winner"] == home["id"]
-        )
-
-        away_h2h_wins = sum(
-            1
-            for item in h2h
-            if item["winner"] == away["id"]
-        )
-
-        total_h2h = (
-            home_h2h_wins
-            + away_h2h_wins
-        )
-
+        home_h2h_wins = sum(1 for item in h2h if item["winner"] == home["id"])
+        away_h2h_wins = sum(1 for item in h2h if item["winner"] == away["id"])
+        total_h2h = home_h2h_wins + away_h2h_wins
         if total_h2h:
+            home_score += home_h2h_wins / total_h2h * 100 * 0.10
+            away_score += away_h2h_wins / total_h2h * 100 * 0.10
 
-            home_score += (
-                home_h2h_wins
-                / total_h2h
-                * 100
-                * 0.10
-            )
-
-            away_score += (
-                away_h2h_wins
-                / total_h2h
-                * 100
-                * 0.10
-            )
-
-    # ==================================
-    # 最终推荐
-    # ==================================
     if home_score >= away_score:
-        return (
-            home["name"],
-            home_score,
-            away_score
-        )
-
-    return (
-        away["name"],
-        home_score,
-        away_score
-    )
-
+        return home["name"], home_score, away_score
+    return away["name"], home_score, away_score
 
 def format_percent(value):
     return f"{value:.0f}"
 
-
 def format_points(value):
     return f"{value:.1f}"
 
-
 async def analyze_game(client, game):
+    home_id, away_id = game["_home_id"], game["_away_id"]
+    home = {"id": home_id, "name": translate_team(game["_home_name"])}
+    away = {"id": away_id, "name": translate_team(game["_away_name"])}
 
-    home_id = game["_home_id"]
-    away_id = game["_away_id"]
-
-    home_name_raw = game["_home_name"]
-    away_name_raw = game["_away_name"]
-
-    home = {
-        "id": home_id,
-        "name": translate_team(
-            home_name_raw
-        )
-    }
-
-    away = {
-        "id": away_id,
-        "name": translate_team(
-            away_name_raw
-        )
-    }
-
-# ==============================
-    # 获取数据
-    # ==============================
     home_recent, away_recent, h2h = await asyncio.gather(
-        fetch_team_recent_games(
-            client,
-            home_id
-        ),
-        fetch_team_recent_games(
-            client,
-            away_id
-        ),
-        fetch_head_to_head(
-            client,
-            home_id,
-            away_id
-        )
+        fetch_team_recent_games(client, home_id),
+        fetch_team_recent_games(client, away_id),
+        fetch_head_to_head(client, home_id, away_id)
     )
 
-    # ==============================
-    # 数据不足 → 直接跳过
-    # ==============================
-    if (
-        len(home_recent)
-        < BASKETBALL_MIN_RECENT_GAMES
-    ):
-
-        logger.info(
-            "跳过比赛：主队近期数据不足 | %s | %s场",
-            home["name"],
-            len(home_recent)
-        )
-
+    if len(home_recent) < BASKETBALL_MIN_RECENT_GAMES or len(away_recent) < BASKETBALL_MIN_RECENT_GAMES:
         return None
 
-    if (
-        len(away_recent)
-        < BASKETBALL_MIN_RECENT_GAMES
-    ):
-
-        logger.info(
-            "跳过比赛：客队近期数据不足 | %s | %s场",
-            away["name"],
-            len(away_recent)
-        )
-
-        return None
-
-    # ==============================
-    # 推荐计算
-    # ==============================
-    (
-        recommendation,
-        home_score,
-        away_score
-    ) = calculate_recommendation(
-        home,
-        away,
-        home_recent,
-        away_recent,
-        h2h
-    )
-
+    recommendation, home_score, away_score = calculate_recommendation(home, away, home_recent, away_recent, h2h)
     if not recommendation:
         return None
 
-    # ==============================
-    # 数据汇总
-    # ==============================
-    home_summary = summarize_recent(
-        home_recent
-    )
-
-    away_summary = summarize_recent(
-        away_recent
-    )
-
-    home_ha = home_away_summary(
-        home_recent,
-        home["id"],
-        True
-    )
-
-    away_ha = home_away_summary(
-        away_recent,
-        away["id"],
-        False
-    )
+    home_summary = summarize_recent(home_recent)
+    away_summary = summarize_recent(away_recent)
+    home_ha = home_away_summary(home_recent, home["id"], True)
+    away_ha = home_away_summary(away_recent, away["id"], False)
 
     return {
-        "time": game["_china_datetime"].strftime(
-            "%H:%M"
-        ),
-
+        "time": game["_china_datetime"].strftime("%H:%M"),
         "home": home["name"],
         "away": away["name"],
-
         "recommendation": recommendation,
-
-        "home_recent_count": len(
-            home_recent
-        ),
-
-        "away_recent_count": len(
-            away_recent
-        ),
-
+        "home_recent_count": len(home_recent),
+        "away_recent_count": len(away_recent),
         "home_wins": home_summary["wins"],
         "home_losses": home_summary["losses"],
-
         "away_wins": away_summary["wins"],
         "away_losses": away_summary["losses"],
-
-        "home_win_rate": home_summary[
-            "win_rate"
-        ],
-
-        "away_win_rate": away_summary[
-            "win_rate"
-        ],
-
-        "home_avg_points": home_summary[
-            "avg_points"
-        ],
-
-        "away_avg_points": away_summary[
-            "avg_points"
-        ],
-
-        "home_ha_win_rate": home_ha[
-            "win_rate"
-        ],
-
-        "away_ha_win_rate": away_ha[
-            "win_rate"
-        ],
-
+        "home_win_rate": home_summary["win_rate"],
+        "away_win_rate": away_summary["win_rate"],
+        "home_avg_points": home_summary["avg_points"],
+        "away_avg_points": away_summary["avg_points"],
+        "home_ha_win_rate": home_ha["win_rate"],
+        "away_ha_win_rate": away_ha["win_rate"],
         "h2h_count": len(h2h),
-
         "home_score": home_score,
         "away_score": away_score,
     }
 
-
 def format_basketball_message(analyses):
-
-    # ==============================
-    # 没有符合条件的赛事
-    # ==============================
     if not analyses:
+        return "🏀 今日篮球赛事精选\n\n暂无符合数据条件赛事。"
 
-        return (
-            "🏀 今日篮球赛事精选\n\n"
-            "暂无符合数据条件赛事。"
-        )
+    blocks = ["🏀 今日篮球赛事精选"]
+    for item in analyses[:BASKETBALL_TOP_N]:
+        home_form = f"{item['home_wins']}胜{item['home_losses']}负"
+        away_form = f"{item['away_wins']}胜{item['away_losses']}负"
 
-    blocks = [
-        "🏀 今日篮球赛事精选"
-    ]
-
-    for item in analyses[
-        :BASKETBALL_TOP_N
-    ]:
-
-        home_form = (
-            f"{item['home_wins']}胜"
-            f"{item['home_losses']}负"
-        )
-
-        away_form = (
-            f"{item['away_wins']}胜"
-            f"{item['away_losses']}负"
-        )
-
-        # ==============================
-        # 进攻表现
-        # ==============================
-        if (
-            item["home_avg_points"]
-            > item["away_avg_points"]
-        ):
-
-            attack_text = (
-                f"{item['home']}场均得分 "
-                f"{format_points(item['home_avg_points'])}，"
-                f"{item['away']}场均得分 "
-                f"{format_points(item['away_avg_points'])}。"
-                f"进攻数据参考上，"
-                f"{item['home']}略占优势。"
-            )
-
-        elif (
-            item["away_avg_points"]
-            > item["home_avg_points"]
-        ):
-
-            attack_text = (
-                f"{item['home']}场均得分 "
-                f"{format_points(item['home_avg_points'])}，"
-                f"{item['away']}场均得分 "
-                f"{format_points(item['away_avg_points'])}。"
-                f"进攻数据参考上，"
-                f"{item['away']}略占优势。"
-            )
-
+        if item["home_avg_points"] > item["away_avg_points"]:
+            attack_text = f"{item['home']}场均得分 {format_points(item['home_avg_points'])}，进攻略占优势。"
+        elif item["away_avg_points"] > item["home_avg_points"]:
+            attack_text = f"{item['away']}场均得分 {format_points(item['away_avg_points'])}，进攻略占优势。"
         else:
+            attack_text = "双方场均得分接近，进攻差距较小。"
 
-            attack_text = (
-                f"{item['home']}与"
-                f"{item['away']}场均得分接近，"
-                "进攻数据参考上差距较小。"
-            )
-
-        # ==============================
-        # 最终模板
-        # ==============================
         blocks.append(
-
             f"⏰ 比赛时间：{item['time']}\n"
-
-            f"🔹 比赛队伍："
-            f"{item['home']} vs "
-            f"{item['away']}\n"
-
-            f"🎯 球队推荐："
-            f"{item['recommendation']}\n"
-
+            f"🔹 比赛队伍：{item['home']} vs {item['away']}\n"
+            f"🎯 球队推荐：{item['recommendation']}\n"
             f"📊 近况参考：\n"
-
-            f"🔥 {item['home']}："
-            f"近{item['home_recent_count']}场 "
-            f"{home_form}，"
-            f"胜率 "
-            f"{format_percent(item['home_win_rate'])}%\n"
-
-            f"🔥 {item['away']}："
-            f"近{item['away_recent_count']}场 "
-            f"{away_form}，"
-            f"胜率 "
-            f"{format_percent(item['away_win_rate'])}%\n"
-
-            f"🔥 进攻表现："
-            f"{attack_text}\n"
-
-            "💡 综合参考："
-            "近期战绩、进攻表现为主要参考，"
-            "主客场与历史交手仅作辅助。\n"
-
-            "⚠️ 以上为赛事数据参考，"
-            "不代表比赛结果。"
+            f"🔥 {item['home']}：近{item['home_recent_count']}场 {home_form}，胜率 {format_percent(item['home_win_rate'])}%\n"
+            f"🔥 {item['away']}：近{item['away_recent_count']}场 {away_form}，胜率 {format_percent(item['away_win_rate'])}%\n"
+            f"🔥 进攻表现：{attack_text}\n"
+            "💡 综合参考：近期战绩、进攻表现为主，主客场与交手为辅。\n"
+            "⚠️ 以上为赛事数据参考，不代表比赛结果。"
         )
-
     return "\n\n".join(blocks)
-    
+
 async def test_basketball_manual(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """管理员手动触发测试发送篮球赛事消息"""
     user = update.effective_user
     if not user or user.id != ADMIN_ID:
         await update.message.reply_text("❌ 你没有权限执行此操作。")
         return
 
     await update.message.reply_text("🔄 正在手动获取篮球赛事并生成测试消息，请稍候...")
-    
     if not BASKETBALL_API_KEY:
         await update.message.reply_text("❌ 错误：未配置 BASKETBALL_API_KEY 环境变量。")
         return
@@ -1885,32 +1228,40 @@ async def test_basketball_manual(update: Update, context: ContextTypes.DEFAULT_T
     try:
         async with httpx.AsyncClient(timeout=BASKETBALL_HTTP_TIMEOUT) as client:
             games = await fetch_today_games(client)
-
             if not games:
                 message_text = "🏀 今日篮球赛事数据分析\n\n今日暂无符合条件的未开赛篮球比赛。"
             else:
-                # 👇【修改这里】使用 asyncio.gather 并发分析所有比赛，速度飞快！
+                games = games[:3]
                 tasks = [analyze_game(client, game) for game in games]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
-
-                analyses = []
-                for res in results:
-                    if isinstance(res, dict):
-                        analyses.append(res)
-                    elif isinstance(res, Exception):
-                        logger.error(f"并发分析比赛异常: {res}")
-
+                analyses = [res for res in results if isinstance(res, dict)]
                 message_text = format_basketball_message(analyses)
 
-        await update.message.reply_text(
-            text=message_text,
-            reply_markup=get_inline_keyboard(),
-        )
-        logger.info("手动触发篮球测试消息发送成功 | user_id=%s", user.id)
-
+        await update.message.reply_text(text=message_text, reply_markup=get_inline_keyboard())
     except Exception as exc:
         logger.exception("手动触发篮球测试异常：%s", exc)
         await update.message.reply_text(f"❌ 测试发送失败，发生异常：{exc}")
+
+
+# ============================================================
+# 时间段精准控制逻辑
+# ============================================================
+def is_allowed_time():
+    """判断当前时间是否在发送窗口：08:00 以及 14:00 到次日 04:00 的每 2 小时"""
+    now = china_now()
+    hour = now.hour
+    minute = now.minute
+    allowed_hours = [8, 14, 16, 18, 20, 22, 0, 2, 4]
+    return hour in allowed_hours and 0 <= minute <= 5
+
+async def basketball_scheduler_task(context: ContextTypes.DEFAULT_TYPE):
+    """每小时被唤醒一次，检查时间是否符合，符合则执行"""
+    if is_allowed_time():
+        logger.info("达到预定发送时间，开始执行篮球推荐任务...")
+        await send_basketball_recommendations(context)
+    else:
+        logger.info("当前时间不在发送窗口，跳过篮球推荐任务。")
+
 
 async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
     if not BASKETBALL_API_KEY:
@@ -1924,20 +1275,11 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
             if not games:
                 message_text = "🏀 今日篮球赛事数据分析\n\n今日暂无符合条件的未开赛篮球比赛。"
             else:
-                # 💡 关键限制：每天最多只分析前 3 场比赛，严格控制 API 免费额度！
                 games = games[:3]
-
-                # 并发分析这几场比赛，速度飞快
                 tasks = [analyze_game(client, game) for game in games]
                 results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                analyses = []
-                for res in results:
-                    if isinstance(res, dict):
-                        analyses.append(res)
-                    elif isinstance(res, Exception):
-                        logger.error(f"定时任务并发分析比赛异常: {res}")
-
+                analyses = [res for res in results if isinstance(res, dict)]
                 message_text = format_basketball_message(analyses)
 
         for row in get_registered_groups():
@@ -1948,69 +1290,14 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
                     text=message_text,
                     reply_markup=get_inline_keyboard(),
                 )
-                logger.info(
-                    "篮球赛事数据分析发送成功 | chat_id=%s | count=%s",
-                    chat_id,
-                    len(games),
-                )
+                logger.info("篮球赛事数据分析发送成功 | chat_id=%s", chat_id)
             except Forbidden:
-                logger.error("机器人已无权访问篮球群组 | chat_id=%s", chat_id)
                 disable_registered_group(chat_id)
             except TelegramError as exc:
-                log_exception(
-                    "篮球赛事数据分析发送失败",
-                    exc,
-                    chat_id=chat_id,
-                )
+                log_exception("篮球赛事数据分析发送失败", exc, chat_id=chat_id)
             except Exception as exc:
-                log_exception(
-                    "篮球赛事数据分析未知异常",
-                    exc,
-                    chat_id=chat_id,
-                )
+                log_exception("篮球赛事数据分析未知异常", exc, chat_id=chat_id)
 
-    except httpx.TimeoutException:
-        logger.error("篮球 API 请求超时")
-    except httpx.HTTPError as exc:
-        logger.error("篮球 API 网络错误：%s", exc)
-    except Exception as exc:
-        logger.exception("篮球赛事任务异常：%s", exc)
-        
-                message_text = format_basketball_message(analyses)
-
-        for row in get_registered_groups():
-            chat_id = row["chat_id"]
-            try:
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=message_text,
-                    reply_markup=get_inline_keyboard(),
-                )
-                logger.info(
-                    "篮球赛事数据分析发送成功 | chat_id=%s | count=%s",
-                    chat_id,
-                    len(games),
-                )
-            except Forbidden:
-                logger.error("机器人已无权访问篮球群组 | chat_id=%s", chat_id)
-                disable_registered_group(chat_id)
-            except TelegramError as exc:
-                log_exception(
-                    "篮球赛事数据分析发送失败",
-                    exc,
-                    chat_id=chat_id,
-                )
-            except Exception as exc:
-                log_exception(
-                    "篮球赛事数据分析未知异常",
-                    exc,
-                    chat_id=chat_id,
-                )
-
-    except httpx.TimeoutException:
-        logger.error("篮球 API 请求超时")
-    except httpx.HTTPError as exc:
-        logger.error("篮球 API 网络错误：%s", exc)
     except Exception as exc:
         logger.exception("篮球赛事任务异常：%s", exc)
 
@@ -2030,18 +1317,18 @@ def main():
     )
 
     if app.job_queue:
-        # 1. 每小时发送一次的广告任务
+        # 1. 广告任务（每小时一次）
         app.job_queue.run_repeating(
             send_scheduled_ads,
             interval=3600,
             first=60
         )
         
-        # 2. 篮球赛事推荐任务（改为每小时唤醒一次，由时间判断函数精准控制时间段）
+        # 2. 篮球推荐调度任务（每小时检查一次时间段）
         app.job_queue.run_repeating(
             basketball_scheduler_task,
-            interval=3600,  # 每 3600 秒（1小时）检查一次
-            first=30        # 启动 30 秒后第一次检查
+            interval=3600,
+            first=30
         )
 
     app.add_handler(CommandHandler("start", start))
