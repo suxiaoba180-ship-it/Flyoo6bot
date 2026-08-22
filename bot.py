@@ -721,6 +721,37 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
     if update.effective_chat.type != "private":
         return
 
+    # 1. 检查用户点击的是不是底部固定菜单按钮的文本
+    text_to_feature = {
+        "📝 注册平台": ("register", "register.png", (
+            "🎉 福利已上线，早注册早领取！\n"
+            "现在加入T1体育，即可享受：\n\n"
+            "💰 首存彩金加码\n"
+            "🛡 专属包赔活动\n"
+            "⚽️ 热门赛事推荐\n"
+            "🎯 竞猜互动奖励\n"
+            "🎁 隐藏活动福利\n\n"
+            "注册时务必填写邀请码：\n"
+            "🔑 20001136\n\n"
+            "🌐 注册地址：\n"
+            "https://www.t1ty.top?agentId=20001136\n\n"
+            "永久防失联地址：\n"
+            "https://jully.pw"
+        )),
+        "🎁 新人彩金": ("newbie", "newbie.png", "🔥 新人专属福利已开启！首存立享彩金加码 + 包赔护航。"),
+        "📅 签到彩金": ("checkin", "checkin.png", "🚀 每日打卡签到，连续签到天数越多，签到彩金越丰厚！"),
+        "💰 日存彩金": ("deposit", "deposit.png", "🚀 每日首笔存款满300元即可参与【复存有礼】活动。"),
+        "👥 推荐好礼": ("invite", "invite.png", "🎉 分享您的专属邀请链接给好友，共同享受丰厚推荐返利！"),
+        "🗺 探索秘境": ("explore", "explore.png", "https://t.me/Avior96Bot\n\n@Avior96Bot"),
+    }
+
+    if message.text in text_to_feature:
+        name, img, text = text_to_feature[message.text]
+        await notify_customer_action(context, user, name)
+        await send_feature_content(update, img, text)
+        return
+
+    # 2. 如果不是菜单按钮，则是普通咨询，转发给客服群
     topic_id = await ensure_customer_topic(context, user)
     if not topic_id:
         return
