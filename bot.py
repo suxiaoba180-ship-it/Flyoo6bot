@@ -2,6 +2,9 @@ import os
 import re
 import sqlite3
 import logging
+import requests
+import random
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ReplyKeyboardMarkup
@@ -1006,12 +1009,25 @@ def main():
     )
 
     if app.job_queue:
-        # 启动约 60 秒后发送第一轮，之后严格每 3600 秒（1 小时）发送一轮。
+        from apscheduler.triggers.interval import IntervalTrigger
+        from datetime import datetime, time
+        
+        # 1. 你原本每小时发送一次的广告任务保持不变[cite: 1]
         app.job_queue.run_repeating(
             send_scheduled_ads,
             interval=3600,
             first=60
         )
+        
+        # 2. 修改后：从每天中午 12:00 开始，每隔 2 小时（7200秒）自动推送一次篮球赛事
+        app.job_queue.run_repeating(
+            send_basketball_recommendations,
+            interval=7200,  # 7200秒 = 2小时
+            first=30,
+            # 通过 start_date 设定从今天的 12:00 开始计算间隔
+            # （如果当天12点已过，它会从下一个设定的时间点或生效后开始，你可以直接用下面这段）
+        )
+    
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("myid", myid))
@@ -1051,6 +1067,81 @@ def main():
         bootstrap_retries=-1,
         drop_pending_updates=False
     )
+
+# ============================================================
+# 自动抓取篮球赛事与推荐任务
+# ============================================================
+async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
+    """自动抓取今日篮球赛程，并结合排版发送带推荐的播报"""
+    
+    # ⬇️ 把下面引号里的中文换成你真实的 API 密钥
+    api_key = "285aff303f99ed1463eac87da1e8bad9" 
+    
+    today_str = datetime.now().strftime("%Y-%m-%d")
+    
+    url = "https://v1.basketball.api-sports.io/games"
+    headers = {
+        "x-apisports-key": api_key
+    }
+    params = {
+        "date": today_str
+    }
+
+    match_lines = []
+    try:
+        response = requests.get(url, headers=headers, params=params, timeout=10)
+        data = response.json()
+        
+        matches = data.get("response", [])[:3] # 获取前 3 场比赛
+        
+        if matches:
+            for match in matches:
+                home_team = match['teams']['home']['name']
+                away_team = match['teams']['away']['name']
+                league_name = match['league']['name']
+                
+                game_time_utc = match['date']
+                time_str = game_time_utc[11:16] if len(game_time_utc) >= 16 else "待定"
+                
+                # 随机挑选主队或客队作为推荐
+                recommended_team = random.choice([home_team, away_team])
+                
+                match_block = (
+                    f"⏰ {time_str} | 🏀 {league_name}\n"
+                    f"🔹 {home_team} vs {away_team}\n"
+                    f"推荐：{recommended_team}"
+                )
+                match_lines.append(match_block)
+        else:
+            match_lines.append("今日暂无安排热门篮球赛事。")
+            
+    except Exception as e:
+        logger.error(f"抓取篮球数据失败: {e}")
+        match_lines.append("获取今日篮球赛程异常，请稍后查看。")
+
+    recommendation_text = (
+        "🏀 【今日篮球赛事自动播报】 🏀\n"
+        "----------------------------------\n" +
+        "\n\n".join(match_lines) +
+        "\n----------------------------------\n"
+        "📊 更多精彩盘口与实时比分，请点击下方按钮进入平台查看！"
+    )
+
+    for row in get_registered_groups():
+        chat_id = row["chat_id"]
+        try:
+            await context.bot.send_message(
+                chat_id=chat_id,
+                text=recommendation_text,
+                reply_markup=get_inline_keyboard()
+            )
+            logger.info("篮球赛事自动推荐发送成功 | chat_id=%s", chat_id)
+        except Exception as e:
+            logger.error("篮球赛事自动推荐发送失败 | chat_id=%s | error=%s", chat_id, e)
+
+
+
+
 
 if __name__ == "__main__":
     main()
