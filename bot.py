@@ -826,12 +826,12 @@ def main():
             first=60
         )
         
-        # 2. 修正：使用 job_kwargs 传递 CronTrigger 触发器，避免类型冲突
-        app.job_queue.run_repeating(
+        # 2. 使用 APScheduler 调度器直接添加 Cron 定时任务
+        app.job_queue.scheduler.add_job(
             send_basketball_recommendations,
-            interval=86400,  # 占位默认周期
-            first=30,
-            job_kwargs={"trigger": CronTrigger(hour="12-22/2", minute=0)}
+            trigger=CronTrigger(hour="12-22/2", minute=0),
+            id="basketball_cron_job",
+            replace_existing=True
         )
 
     app.add_handler(CommandHandler("start", start))
