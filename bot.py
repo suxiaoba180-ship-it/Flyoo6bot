@@ -479,7 +479,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if chat.type == "private" and args:
         param = args[0]
-            button_mapping = {
+        button_mapping = {
         "register": ("📝 注册平台", "register.png", (
             "🎉 福利已上线，早注册早领取！\n"
             "现在加入T1体育，即可享受：\n\n"
