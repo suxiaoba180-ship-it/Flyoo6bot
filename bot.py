@@ -1234,6 +1234,7 @@ async def fetch_team_recent_games(client, team_id):
         team_id,
         len(completed)
     )
+    return completed
 
 async def fetch_head_to_head(client, home_id, away_id):
     """
@@ -1923,17 +1924,58 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
             if not games:
                 message_text = "🏀 今日篮球赛事数据分析\n\n今日暂无符合条件的未开赛篮球比赛。"
             else:
-                analyses = []
-                for game in games:
-                    try:
-                        result = await analyze_game(client,game)
-                        if result:analyses.append(result)
-                    except Exception as exc:
-                        logger.exception(
-                            "篮球赛事分析失败 | game_id=%s | error=%s",
-                            game.get("id"), exc
-                        )
+                # 💡 关键限制：每天最多只分析前 3 场比赛，严格控制 API 免费额度！
+                games = games[:3]
 
+                # 并发分析这几场比赛，速度飞快
+                tasks = [analyze_game(client, game) for game in games]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
+
+                analyses = []
+                for res in results:
+                    if isinstance(res, dict):
+                        analyses.append(res)
+                    elif isinstance(res, Exception):
+                        logger.error(f"定时任务并发分析比赛异常: {res}")
+
+                message_text = format_basketball_message(analyses)
+
+        for row in get_registered_groups():
+            chat_id = row["chat_id"]
+            try:
+                await context.bot.send_message(
+                    chat_id=chat_id,
+                    text=message_text,
+                    reply_markup=get_inline_keyboard(),
+                )
+                logger.info(
+                    "篮球赛事数据分析发送成功 | chat_id=%s | count=%s",
+                    chat_id,
+                    len(games),
+                )
+            except Forbidden:
+                logger.error("机器人已无权访问篮球群组 | chat_id=%s", chat_id)
+                disable_registered_group(chat_id)
+            except TelegramError as exc:
+                log_exception(
+                    "篮球赛事数据分析发送失败",
+                    exc,
+                    chat_id=chat_id,
+                )
+            except Exception as exc:
+                log_exception(
+                    "篮球赛事数据分析未知异常",
+                    exc,
+                    chat_id=chat_id,
+                )
+
+    except httpx.TimeoutException:
+        logger.error("篮球 API 请求超时")
+    except httpx.HTTPError as exc:
+        logger.error("篮球 API 网络错误：%s", exc)
+    except Exception as exc:
+        logger.exception("篮球赛事任务异常：%s", exc)
+        
                 message_text = format_basketball_message(analyses)
 
         for row in get_registered_groups():
@@ -1995,11 +2037,11 @@ def main():
             first=60
         )
         
-        # 2. 篮球赛事推荐任务（每隔 2 小时运行一次）
+        # 2. 篮球赛事推荐任务（改为每小时唤醒一次，由时间判断函数精准控制时间段）
         app.job_queue.run_repeating(
-            send_basketball_recommendations,
-            interval=7200,  # 7200 秒 = 2 小时
-            first=30        # 启动 30 秒后第一次执行
+            basketball_scheduler_task,
+            interval=3600,  # 每 3600 秒（1小时）检查一次
+            first=30        # 启动 30 秒后第一次检查
         )
 
     app.add_handler(CommandHandler("start", start))
