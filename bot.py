@@ -2,6 +2,7 @@ import os
 import re
 import sqlite3
 import logging
+import asyncio
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -1885,18 +1886,20 @@ async def test_basketball_manual(update: Update, context: ContextTypes.DEFAULT_T
             games = await fetch_today_games(client)
 
             if not games:
-                message_text = "🏀 今日篮球赛事精选\n\n""暂无符合数据条件赛事。"
+                message_text = "🏀 今日篮球赛事数据分析\n\n今日暂无符合条件的未开赛篮球比赛。"
             else:
-                analyses = []
-                for game in games:
-                    try:
-                        result = await analyze_game(client,game)
-                        if result: analyses.append(result)
-                        
-                    except Exception as exc:
-                        logger.exception("篮球赛事分析失败 | game_id=%s | error=%s", game.get("id"), exc)
+                # 👇【修改这里】使用 asyncio.gather 并发分析所有比赛，速度飞快！
+                tasks = [analyze_game(client, game) for game in games]
+                results = await asyncio.gather(*tasks, return_exceptions=True)
 
-                message_text = "【测试推送】\n" + format_basketball_message(analyses)
+                analyses = []
+                for res in results:
+                    if isinstance(res, dict):
+                        analyses.append(res)
+                    elif isinstance(res, Exception):
+                        logger.error(f"并发分析比赛异常: {res}")
+
+                message_text = format_basketball_message(analyses)
 
         await update.message.reply_text(
             text=message_text,
