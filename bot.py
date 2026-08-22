@@ -300,18 +300,21 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
 )
 
 def get_inline_keyboard():
+    # ⚠️ 请把下面的 Flyoo6bot 换成你自己的机器人用户名（不要加 @）
+    bot_username = "Flyoo6bot" 
+    
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📝 注册平台", callback_data="register"),
-            InlineKeyboardButton("🎁 新人彩金", callback_data="newbie")
+            InlineKeyboardButton("📝 注册平台", url=f"https://t.me/{bot_username}?start=register"),
+            InlineKeyboardButton("🎁 新人彩金", url=f"https://t.me/{bot_username}?start=newbie")
         ],
         [
-            InlineKeyboardButton("📅 签到彩金", callback_data="checkin"),
-            InlineKeyboardButton("💰 日存彩金", callback_data="deposit")
+            InlineKeyboardButton("📅 签到彩金", url=f"https://t.me/{bot_username}?start=checkin"),
+            InlineKeyboardButton("💰 日存彩金", url=f"https://t.me/{bot_username}?start=deposit")
         ],
         [
-            InlineKeyboardButton("👥 推荐好礼", callback_data="invite"),
-            InlineKeyboardButton("🗺 探索秘境", callback_data="explore")
+            InlineKeyboardButton("👥 推荐好礼", url=f"https://t.me/{bot_username}?start=invite"),
+            InlineKeyboardButton("🗺 探索秘境", url=f"https://t.me/{bot_username}?start=explore")
         ]
     ])
 
