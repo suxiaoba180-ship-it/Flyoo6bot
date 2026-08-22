@@ -764,7 +764,28 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
             message_thread_id=topic_id
         )
     except Exception as e:
-        log_exception("转发客户消息失败", e, chat_id=SUPPORT_GROUP_ID, user_id=user.id)
+        # 如果报错是因为话题找不到（被手动删了）
+        if "Message thread not found" in str(e):
+            # 从数据库中删掉这个失效的旧话题记录
+            with db_connect() as conn:
+                conn.execute("DELETE FROM customer_topics WHERE customer_id = ?", (user.id,))
+                conn.commit()
+            
+            # 重新获取/创建一个新话题并发送
+            new_topic_id = await ensure_customer_topic(context, user)
+            if new_topic_id:
+                try:
+                    await context.bot.copy_message(
+                        chat_id=SUPPORT_GROUP_ID,
+                        from_chat_id=user.id,
+                        message_id=message.message_id,
+                        message_thread_id=new_topic_id
+                    )
+                    return
+                except Exception as inner_e:
+                    log_exception("重试转发客户消息失败", inner_e, chat_id=SUPPORT_GROUP_ID, user_id=user.id)
+        else:
+            log_exception("转发客户消息失败", e, chat_id=SUPPORT_GROUP_ID, user_id=user.id)
 
 
 async def delete_notification_callback(context: ContextTypes.DEFAULT_TYPE):
