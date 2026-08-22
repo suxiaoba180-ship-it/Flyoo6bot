@@ -1120,7 +1120,7 @@ def format_basketball_message(analyses):
 
     for item in analyses[:BASKETBALL_TOP_N]:
         blocks.append(
-            f"⏰ 比赛时间：{item['time']}（北京时间）\n"
+            f"⏰ 比赛时间：{item['time']}\n"
             f"🔹 比赛队伍：{item['home']} vs {item['away']}\n"
             f"🏆 推荐队伍：{item['recommendation']}\n"
             "📊 数据分析：\n"
