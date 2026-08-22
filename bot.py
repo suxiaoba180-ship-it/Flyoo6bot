@@ -300,18 +300,19 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
 )
 
 def get_inline_keyboard():
+    bot_username = "你的机器人用户名"  # ⚠️ 把这几个字换成你机器人的英文用户名（不要加 @）
     return InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📝 注册平台", callback_data="register"),
-            InlineKeyboardButton("🎁 新人彩金", callback_data="newbie")
+            InlineKeyboardButton("📝 注册平台", url=f"https://t.me/{bot_username}?start=register"),
+            InlineKeyboardButton("🎁 新人彩金", url=f"https://t.me/{bot_username}?start=newbie")
         ],
         [
-            InlineKeyboardButton("📅 签到彩金", callback_data="checkin"),
-            InlineKeyboardButton("💰 日存彩金", callback_data="deposit")
+            InlineKeyboardButton("📅 签到彩金", url=f"https://t.me/{bot_username}?start=checkin"),
+            InlineKeyboardButton("💰 日存彩金", url=f"https://t.me/{bot_username}?start=deposit")
         ],
         [
-            InlineKeyboardButton("👥 推荐好礼", callback_data="invite"),
-            InlineKeyboardButton("🗺 探索秘境", callback_data="explore")
+            InlineKeyboardButton("👥 推荐好礼", url=f"https://t.me/{bot_username}?start=invite"),
+            InlineKeyboardButton("🗺 探索秘境", url=f"https://t.me/{bot_username}?start=explore")
         ]
     ])
 
@@ -420,6 +421,44 @@ async def send_feature_content(update_or_query, image_filename, text_content):
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    chat = update.effective_chat
+    args = context.args  
+
+    # 如果用户是从群里点击按钮跳进私聊的，就直接私发对应内容
+    if chat.type == "private" and args:
+        param = args[0]
+        
+        button_mapping = {
+            "register": ("📝 注册平台", "register.png", (
+                "🎉 福利已上线，早注册早领取！\n"
+                "现在加入T1体育，即可享受：\n\n"
+                "💰 首存彩金加码\n"
+                "🛡 专属包赔活动\n"
+                "⚽️ 热门赛事推荐\n"
+                "🎯 竞猜互动奖励\n"
+                "🎁 隐藏活动福利\n\n"
+                "注册时务必填写邀请码：\n"
+                "🔑 20001136\n\n"
+                "🌐 注册地址：\n"
+                "https://www.t1ty.top?agentId=20001136\n\n"
+                "永久防失联地址：\n"
+                "https://jully.pw"
+            )),
+            "newbie": ("🎁 新人彩金", "newbie.png", "🔥 新人专属福利已开启！首存立享彩金加码 + 包赔护航。"),
+            "checkin": ("📅 签到彩金", "checkin.png", "🚀 每日打卡签到，连续签到天数越多，签到彩金越丰厚！"),
+            "deposit": ("💰 日存彩金", "deposit.png", "🚀 每日首笔存款满300元即可参与【复存有礼】活动。"),
+            "invite": ("👥 推荐好礼", "invite.png", "🎉 分享您的专属邀请链接给好友，共同享受丰厚推荐返利！"),
+            "explore": ("🗺 探索秘境", "explore.png", "https://t.me/Avior96Bot\n\n@Avior96Bot"),
+        }
+
+        if param in button_mapping:
+            name, img, text = button_mapping[param]
+            await notify_customer_action(context, user, name)
+            await send_feature_content(update, img, text)
+            return
+
+    # 普通的欢迎语（直接点机器人时显示）
     welcome_text = (
         "👋 欢迎来到T1体育平台！\n\n"
         "🔥 请直接在对话框发送消息咨询，或点击下方按钮选择您需要体验的服务："
@@ -439,10 +478,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=get_inline_keyboard()
         )
     
-    await update.message.reply_text(
-        "👇 您也可以直接使用下方固定键盘：",
-        reply_markup=MAIN_REPLY_MARKUP
-    )
+    if chat.type == "private":
+        await update.message.reply_text(
+            "👇 您也可以直接使用下方固定键盘：",
+            reply_markup=MAIN_REPLY_MARKUP
+        )
+```[cite: 5]
+
+修改好这两处并保存，你的机器人就能实现“在群里点按钮，自动跳转到私聊并发送内容”的功能了。
 
 
 async def groupid(update: Update, context: ContextTypes.DEFAULT_TYPE):
