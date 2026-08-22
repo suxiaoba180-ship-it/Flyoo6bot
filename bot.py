@@ -793,7 +793,6 @@ def start_health_server():
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     server.serve_forever()
 
-
 # ============================================================
 # 自动抓取篮球赛事与数据分析任务
 # ============================================================
@@ -822,10 +821,8 @@ def parse_api_datetime(value):
 
     raw = str(value).strip()
     try:
-        # API-Sports 通常返回 ISO8601，例如 2026-08-22T12:30:00+00:00
         dt = datetime.fromisoformat(raw.replace("Z", "+00:00"))
     except ValueError:
-        # 兼容没有时区的 ISO 时间；API-Sports 日期默认按 UTC 处理。
         try:
             dt = datetime.strptime(raw[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc)
         except ValueError:
@@ -851,11 +848,9 @@ def is_future_game(game, now=None):
 
     status = normalize_game_status(game)
 
-    # 已结束、取消、延期、暂停或正在进行的比赛全部排除。
     if status in BASKETBALL_FINISHED_STATUSES:
         return False
 
-    # 只允许严格晚于当前时间的比赛，避免刚刚开赛的比赛被选中。
     return game_dt > now
 
 
@@ -911,7 +906,6 @@ async def fetch_today_games(client):
         if not is_future_game(game, now):
             continue
 
-        # 优先使用 game id 去重；没有 game id 时使用球队+时间。
         key = game_id or (
             home_id,
             away_id,
@@ -975,12 +969,12 @@ def extract_game_result(game, team_id):
 
 
 async def fetch_team_recent_games(client, team_id):
-    """获取球队最近比赛，并从中提取最近5场有效完赛数据。"""
+    """获取球队最近比赛，并从中提取最近5场有效完赛数据（已移除免费版不支持的 last 参数）。"""
     try:
         games = await basketball_api_get(
             client,
             "/games",
-            {"team": team_id, "last": 10},
+            {"team": team_id},
         )
     except Exception as exc:
         logger.warning("获取球队近期比赛失败 | team_id=%s | %s", team_id, exc)
@@ -1006,12 +1000,12 @@ async def fetch_team_recent_games(client, team_id):
 
 
 async def fetch_head_to_head(client, home_id, away_id):
-    """获取双方历史交手，返回最近若干场可解析记录。"""
+    """获取双方历史交手，返回最近若干场可解析记录（已移除免费版不支持的 last 参数）。"""
     try:
         games = await basketball_api_get(
             client,
             "/games",
-            {"h2h": f"{home_id}-{away_id}", "last": 10},
+            {"h2h": f"{home_id}-{away_id}"},
         )
     except Exception as exc:
         logger.warning(
@@ -1088,44 +1082,29 @@ def home_away_summary(games, team_id, want_home):
 
 
 def calculate_recommendation(home, away, home_recent, away_recent, h2h):
-    """
-    数据综合评分，不使用随机/字符串伪推荐。
-    权重：
-      - 近5场胜率 40%
-      - 近5场场均得分 25%
-      - 防守（场均失分越低越好）15%
-      - 主客场近期表现 10%
-      - 近5次交手 10%
-    """
     home_sum = summarize_recent(home_recent)
     away_sum = summarize_recent(away_recent)
 
-    # 基础数据不足时仍可比较，但降低该指标影响。
     home_score = 0.0
     away_score = 0.0
 
-    # 近5场胜率
     home_score += home_sum["win_rate"] * 0.40
     away_score += away_sum["win_rate"] * 0.40
 
-    # 场均得分
     max_points = max(home_sum["avg_points"], away_sum["avg_points"], 1.0)
     home_score += home_sum["avg_points"] / max_points * 100 * 0.25
     away_score += away_sum["avg_points"] / max_points * 100 * 0.25
 
-    # 场均失分：越低越好
     max_allowed = max(home_sum["avg_allowed"], away_sum["avg_allowed"], 1.0)
     home_score += (1 - home_sum["avg_allowed"] / max_allowed) * 100 * 0.15
     away_score += (1 - away_sum["avg_allowed"] / max_allowed) * 100 * 0.15
 
-    # 主客场：分别取近期同场景比赛
     home_ha = home_away_summary(home_recent, home["id"], True)
     away_ha = home_away_summary(away_recent, away["id"], False)
 
     home_score += home_ha["win_rate"] * 0.10
     away_score += away_ha["win_rate"] * 0.10
 
-    # 历史交手
     if h2h:
         h2h_home_wins = sum(1 for item in h2h if item["winner"] == home["id"])
         h2h_away_wins = sum(1 for item in h2h if item["winner"] == away["id"])
@@ -1154,7 +1133,6 @@ async def analyze_game(client, game):
     home = {"id": home_id, "name": game["_home_name"]}
     away = {"id": away_id, "name": game["_away_name"]}
 
-    # 两支球队的近期数据并发获取。
     home_recent, away_recent, h2h = await __import__("asyncio").gather(
         fetch_team_recent_games(client, home_id),
         fetch_team_recent_games(client, away_id),
