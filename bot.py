@@ -817,7 +817,6 @@ async def release_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.job_queue:
         context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_msg.message_id})
 
-
 async def admin_reply_customer(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.effective_message
     user = update.effective_user
@@ -843,13 +842,23 @@ async def admin_reply_customer(update: Update, context: ContextTypes.DEFAULT_TYP
 
     assigned_agent, assigned_agent_name = get_customer_agent(customer_id)
 
+    # 1. 如果该客户还没有任何管理员接单
     if assigned_agent is None:
         sent_err = await message.reply_text("⚠️ 您尚未接入该客户！请先点击上方名片中的【点击接入接待】按钮。")
         if context.job_queue:
             context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_err.message_id})
         return
 
+    # 2. 如果已被其他管理员接单，而当前说话的人不是接单人 -> 拦截并提示
     if assigned_agent != user.id:
+        try:
+            await message.delete()  # 删掉越权发送的消息
+        except Exception:
+            pass
+            
+        sent_err = await message.reply_text(f"⚠️ 提示：当前客户正由【{assigned_agent_name}】接待中，如需强行接单或转交请先点击上方【释放/转交客户】按钮！")
+        if context.job_queue:
+            context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_err.message_id})
         return
 
     try:
