@@ -83,6 +83,13 @@ def init_db():
                 updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS basketball_cache (
+                cache_key TEXT PRIMARY KEY,
+                data TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
         conn.commit()
 
 def log_exception(action, exc, *, chat_id=None, user_id=None):
@@ -181,6 +188,50 @@ def release_customer_agent_db(customer_id):
             (customer_id,)
         )
         conn.commit()
+
+import json
+
+def get_db_cache(cache_key: str):
+    """从数据库账本里查缓存"""
+    with db_connect() as conn:
+        row = conn.execute(
+            "SELECT data, updated_at FROM basketball_cache WHERE cache_key = ?",
+            (cache_key,)
+        ).fetchone()
+        
+        if not row:
+            return None
+        
+        try:
+            cached_at = datetime.fromisoformat(row["updated_at"])
+            if cached_at.tzinfo is None:
+                cached_at = cached_at.replace(tzinfo=timezone.utc)
+            
+            cache_age = (china_now() - cached_at).total_seconds()
+            # 6小时内有效
+            if cache_age < BASKETBALL_CACHE_TTL:
+                return json.loads(row["data"])
+        except Exception:
+            pass
+            
+    return None
+
+def set_db_cache(cache_key: str, data: list):
+    """把数据保存到数据库账本里"""
+    try:
+        now_str = china_now().isoformat()
+        data_str = json.dumps(data, ensure_ascii=False, default=str)
+        with db_connect() as conn:
+            conn.execute("""
+                INSERT INTO basketball_cache(cache_key, data, updated_at)
+                VALUES(?, ?, ?)
+                ON CONFLICT(cache_key) DO UPDATE SET
+                    data = excluded.data,
+                    updated_at = excluded.updated_at
+            """, (cache_key, data_str, now_str))
+            conn.commit()
+    except Exception as e:
+        logger.error(f"写入篮球数据库缓存失败 | key={cache_key} | error={e}")
 
 init_db()
 
@@ -1562,24 +1613,22 @@ async def analyze_game(client, game):
         )
     }
 
-    # ==============================
+# ==============================
     # 获取数据
     # ==============================
-    home_recent, away_recent, h2h = (
-        await __import__("asyncio").gather(
-            fetch_team_recent_games(
-                client,
-                home_id
-            ),
-            fetch_team_recent_games(
-                client,
-                away_id
-            ),
-            fetch_head_to_head(
-                client,
-                home_id,
-                away_id
-            )
+    home_recent, away_recent, h2h = await asyncio.gather(
+        fetch_team_recent_games(
+            client,
+            home_id
+        ),
+        fetch_team_recent_games(
+            client,
+            away_id
+        ),
+        fetch_head_to_head(
+            client,
+            home_id,
+            away_id
         )
     )
 
