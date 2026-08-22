@@ -284,6 +284,8 @@ ACTIVE_GROUPS = set(GROUP_ADS.keys())
 # 定时群发广告任务
 # ============================================================
 async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
+    print("🚨 【测试日志】定时广告任务被触发了！")
+    
     default_ad = next(iter(GROUP_ADS.values()), None)
     if not default_ad:
         logger.warning("没有可用的默认广告配置，跳过本轮群发")
