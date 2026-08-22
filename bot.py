@@ -842,11 +842,17 @@ async def admin_reply_customer(update: Update, context: ContextTypes.DEFAULT_TYP
 
     assigned_agent, assigned_agent_name = get_customer_agent(customer_id)
 
-    # 1. 如果该客户还没有任何管理员接单
+# 1. 如果该客户还没有任何管理员接单
     if assigned_agent is None:
-        sent_err = await message.reply_text("⚠️ 您尚未接入该客户！请先点击上方名片中的【点击接入接待】按钮。")
-        if context.job_queue:
-            context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_err.message_id})
+        try:
+            sent_err = await chat.send_message(
+                "⚠️ 您尚未接入该客户！请先点击上方名片中的【点击接入接待】按钮。",
+                message_thread_id=thread_id
+            )
+            if context.job_queue:
+                context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_err.message_id})
+        except Exception:
+            pass
         return
 
     # 2. 如果已被其他管理员接单，而当前说话的人不是接单人 -> 拦截并提示
@@ -856,9 +862,15 @@ async def admin_reply_customer(update: Update, context: ContextTypes.DEFAULT_TYP
         except Exception:
             pass
             
-        sent_err = await message.reply_text(f"⚠️ 提示：当前客户正由【{assigned_agent_name}】接待中，如需强行接单或转交请先点击上方【释放/转交客户】按钮！")
-        if context.job_queue:
-            context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_err.message_id})
+        try:
+            sent_err = await chat.send_message(
+                f"⚠️ 提示：当前客户正由【{assigned_agent_name}】接待中，如需强行接单或转交请先点击上方【释放/转交客户】按钮！",
+                message_thread_id=thread_id
+            )
+            if context.job_queue:
+                context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_err.message_id})
+        except Exception:
+            pass
         return
 
     try:
@@ -867,9 +879,12 @@ async def admin_reply_customer(update: Update, context: ContextTypes.DEFAULT_TYP
             from_chat_id=SUPPORT_GROUP_ID,
             message_id=message.message_id,
         )
-        sent_msg = await message.reply_text("✅ 已发送给客户。")
+        sent_msg = await chat.send_message("✅ 已发送给客户。", message_thread_id=thread_id)
         if context.job_queue:
             context.job_queue.run_once(delete_notification_callback, when=10, data={"chat_id": chat.id, "message_id": sent_msg.message_id})
+    except Exception as e:
+        print(f"转发消息出错: {e}")
+    
     except Exception as e:
         log_exception("客服回复异常", e, chat_id=customer_id, user_id=user.id)
 
