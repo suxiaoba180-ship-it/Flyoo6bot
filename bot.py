@@ -829,13 +829,16 @@ def start_health_server():
     server.serve_forever()
 
 # ==================================================
-# 球队中英文对照字典
+# 超全球队中英文对照字典（含 NBA、欧洲欧冠豪门、国际国家队）
 # ==================================================
 TEAM_NAME_ZH = {
+    # --- 常见测试与东南亚队伍 ---
     "Binan Tatak Gel": "比南塔塔克",
     "San Juan Knights": "圣胡安骑士",
     "Nhatrang Dolphins": "芽庄海豚",
     "Da Nang Dragons": "岘港龙",
+
+    # --- NBA 东部联盟 (15支) ---
     "Boston Celtics": "波士顿凯尔特人",
     "Brooklyn Nets": "布鲁克林篮网",
     "New York Knicks": "纽约尼克斯",
@@ -851,6 +854,8 @@ TEAM_NAME_ZH = {
     "Miami Heat": "迈阿密热火",
     "Orlando Magic": "奥兰多魔术",
     "Washington Wizards": "华盛顿奇才",
+
+    # --- NBA 西部联盟 (15支) ---
     "Denver Nuggets": "丹佛掘金",
     "Minnesota Timberwolves": "明尼苏达森林狼",
     "Oklahoma City Thunder": "俄克拉荷马城雷霆",
@@ -866,6 +871,53 @@ TEAM_NAME_ZH = {
     "Memphis Grizzlies": "孟菲斯灰熊",
     "New Orleans Pelicans": "新奥尔良鹈鹕",
     "San Antonio Spurs": "圣安东尼奥马刺",
+
+    # --- 欧洲篮球联赛 (EuroLeague 常见豪门) ---
+    "Real Madrid": "皇家马德里",
+    "FC Barcelona": "巴塞罗那",
+    "Anadolu Efes": "安纳托利亚艾菲斯",
+    "Anadolu Efes Istanbul": "伊斯坦布尔艾菲斯",
+    "Fenerbahce": "费内巴切",
+    "Fenerbahce Beko Istanbul": "费内巴切",
+    "Olympiacos": "奥林匹亚科斯",
+    "Olympiacos Piraeus": "奥林匹亚科斯",
+    "Panathinaikos": "帕纳辛纳科斯",
+    "Panathinaikos AKTOR Athens": "帕纳辛纳科斯",
+    "Monaco": "摩纳哥",
+    "AS Monaco": "摩纳哥",
+    "FC Bayern Munich": "拜仁慕尼黑",
+    "Armani Olimpia Milan": "米兰阿玛尼",
+    "Virtus Bologna": "博洛尼亚维图斯",
+    "Crvena Zvezda": "贝尔格莱德红星",
+    "Crvena Zvezda Meridianbet Belgrade": "贝尔格莱德红星",
+    "Partizan": "贝尔格莱德游击",
+    "Partizan Mozzart Bet Belgrade": "贝尔格莱德游击",
+    "Maccabi Tel Aviv": "特拉维夫马卡比",
+    "Baskonia": "巴斯克尼亚",
+    "Kosner Baskonia Vitoria-Gasteiz": "巴斯克尼亚",
+    "Zalgiris Kaunas": "考纳斯扎尔吉里斯",
+    "ALBA Berlin": "柏林阿尔巴",
+    "Paris Basketball": "巴黎篮球",
+
+    # --- 常见国家队 ---
+    "China": "中国",
+    "USA": "美国",
+    "Spain": "西班牙",
+    "France": "法国",
+    "Serbia": "塞尔维亚",
+    "Australia": "澳大利亚",
+    "Canada": "加拿大",
+    "Germany": "德国",
+    "Turkey": "土耳其",
+    "Czech Republic": "捷克",
+    "Greece": "希腊",
+    "Italy": "意大利",
+    "Lithuania": "立陶宛",
+    "Argentina": "阿根廷",
+    "Brazil": "巴西",
+    "Japan": "日本",
+    "South Korea": "韩国",
+    "Philippines": "菲律宾",
 }
 
 def translate_team(english_name):
