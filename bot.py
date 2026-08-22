@@ -1465,6 +1465,13 @@ def main():
     app.add_handler(CommandHandler("groupid", groupid))
     app.add_handler(CommandHandler("test_basketball", test_basketball_manual))
     app.add_handler(CommandHandler("release", release_customer))
+
+    app.add_handler(CommandHandler("register", start))
+    app.add_handler(CommandHandler("newbie", start))
+    app.add_handler(CommandHandler("checkin", start))
+    app.add_handler(CommandHandler("deposit", start))
+    app.add_handler(CommandHandler("invite", start))
+    app.add_handler(CommandHandler("explore", start))
     
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.ChatType.PRIVATE & ~filters.COMMAND, handle_private_message))
