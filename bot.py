@@ -724,10 +724,9 @@ def start_health_server():
 
 
 # ============================================================
-# 自动抓取篮球赛事与推荐任务（已去重、已固定推荐队伍）
+# 自动抓取篮球赛事与推荐任务
 # ============================================================
 async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
-    """自动抓取今日篮球赛程，固定推荐队伍，并自动去除重复赛事"""
     api_key = "285aff303f99ed1463eac87da1e8bad9" 
     today_str = datetime.now().strftime("%Y-%m-%d")
     
@@ -740,12 +739,11 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
     }
 
     match_lines = []
-    seen_matches = set()  # 👈 用于记录已经添加过的赛事，防止重复
+    seen_matches = set()
 
     try:
         response = requests.get(url, headers=headers, params=params, timeout=10)
         data = response.json()
-        
         matches = data.get("response", [])
         
         if matches:
@@ -754,18 +752,15 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
                 away_team = match['teams']['away']['name']
                 league_name = match['league']['name']
                 
-                # 唯一标识这场比赛（比如：湖人 vs 勇士）
                 match_key = f"{home_team}-{away_team}"
                 if match_key in seen_matches:
-                    continue  # 如果已经有了，直接跳过（去重）
+                    continue  # 跳过重复，继续往后寻找
                 
                 seen_matches.add(match_key)
                 
                 game_time_utc = match['date']
                 time_str = game_time_utc[11:16] if len(game_time_utc) >= 16 else "待定"
                 
-                # 🛑 核心修改：利用比赛名字的哈希值固定推荐队伍，不再随机乱变！
-                # 这样只要是对阵这两支球队，每次推出来的固定是同一边
                 team_choice_seed = sum(ord(c) for c in match_key)
                 recommended_team = home_team if team_choice_seed % 2 == 0 else away_team
                 
@@ -776,7 +771,6 @@ async def send_basketball_recommendations(context: ContextTypes.DEFAULT_TYPE):
                 )
                 match_lines.append(match_block)
                 
-                # 限制最多显示 3 场不重复的赛事
                 if len(match_lines) >= 3:
                     break
                     
@@ -832,11 +826,12 @@ def main():
             first=60
         )
         
-        # 2. 修改后：每天从 12:00 开始，每隔 2 小时自动推送一次篮球赛事（12点、14点、16点……）
+        # 2. 修正：使用 job_kwargs 传递 CronTrigger 触发器，避免类型冲突
         app.job_queue.run_repeating(
             send_basketball_recommendations,
-            interval=CronTrigger(hour="12-22/2", minute=0),
-            first=30
+            interval=86400,  # 占位默认周期
+            first=30,
+            job_kwargs={"trigger": CronTrigger(hour="12-22/2", minute=0)}
         )
 
     app.add_handler(CommandHandler("start", start))
