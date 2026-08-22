@@ -817,8 +817,6 @@ def main():
     )
 
     if app.job_queue:
-        from apscheduler.triggers.cron import CronTrigger
-        
         # 1. 每小时发送一次的广告任务
         app.job_queue.run_repeating(
             send_scheduled_ads,
@@ -826,12 +824,12 @@ def main():
             first=60
         )
         
-        # 2. 使用 APScheduler 调度器直接添加 Cron 定时任务
-        app.job_queue.scheduler.add_job(
+        # 2. 篮球赛事推荐任务：改用标准安全的间隔触发（例如每隔 2 小时 = 7200秒）
+        # 这样既能定时循环，又完全兼容 telegram job_queue 的 context 注入机制
+        app.job_queue.run_repeating(
             send_basketball_recommendations,
-            trigger=CronTrigger(hour="12-22/2", minute=0),
-            id="basketball_cron_job",
-            replace_existing=True
+            interval=7200,  # 7200 秒 = 2 小时
+            first=30        # 启动 30 秒后第一次执行
         )
 
     app.add_handler(CommandHandler("start", start))
