@@ -300,7 +300,7 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
 )
 
 def get_inline_keyboard():
-    bot_username = "你的机器人用户名"  # ⚠️ 把这几个字换成你机器人的英文用户名（不要加 @）
+    bot_username = "@Flyoo6bot"  # ⚠️ 把这几个字换成你机器人的英文用户名（不要加 @）
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📝 注册平台", url=f"https://t.me/{bot_username}?start=register"),
@@ -485,7 +485,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 ```[cite: 5]
 
-修改好这两处并保存，你的机器人就能实现“在群里点按钮，自动跳转到私聊并发送内容”的功能了。
 
 
 async def groupid(update: Update, context: ContextTypes.DEFAULT_TYPE):
