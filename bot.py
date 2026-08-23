@@ -234,6 +234,8 @@ def set_db_cache(cache_key: str, data: list):
 
 init_db()
 
+
+
 # ==================================================
 # 定时群发广告配置
 # ==================================================
@@ -297,23 +299,39 @@ async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
         ad_text = data["text"]
         ad_image_name = data.get("image")
 
+        sent_message = None  # 用于接收发送成功后的消息对象
         try:
             ad_image_path = os.path.join(BASE_DIR, ad_image_name) if ad_image_name else ""
             if ad_image_path and os.path.exists(ad_image_path):
                 with open(ad_image_path, "rb") as photo:
-                    await context.bot.send_photo(
+                    # 💡 获取发出的图文消息对象
+                    sent_message = await context.bot.send_photo(
                         chat_id=chat_id,
                         photo=photo,
                         caption=ad_text,
                         reply_markup=get_inline_keyboard(),
                     )
             else:
-                await context.bot.send_message(
+                # 💡 获取发出的纯文字消息对象
+                sent_message = await context.bot.send_message(
                     chat_id=chat_id,
                     text=ad_text,
                     reply_markup=get_inline_keyboard(),
                 )
-            logger.info("定时广告发送成功 | chat_id=%s", chat_id)
+            
+            logger.info("定时广告发送成功 | chat_id=%s | message_id=%s", chat_id, sent_message.message_id)
+
+            # ⏰ 核心新增：注册一个 50 分钟（50 * 60 = 3000 秒）后执行的删除任务
+            if context.job_queue and sent_message:
+                context.job_queue.run_once(
+                    delete_ad_callback,
+                    when=3000,  # 3000秒 = 50分钟
+                    data={
+                        "chat_id": chat_id,
+                        "message_id": sent_message.message_id
+                    }
+                )
+
         except Forbidden as e:
             logger.error("机器人已无权访问群组，自动停用 | chat_id=%s | %s", chat_id, e)
             disable_registered_group(chat_id)
@@ -324,6 +342,17 @@ async def send_scheduled_ads(context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             log_exception("定时广告未知异常", e, chat_id=chat_id)
 
+async def delete_ad_callback(context: ContextTypes.DEFAULT_TYPE):
+    """到达 50 分钟后自动删除广告的任务"""
+    job_data = context.job.data
+    chat_id = job_data["chat_id"]
+    message_id = job_data["message_id"]
+    try:
+        await context.bot.delete_message(chat_id=chat_id, message_id=message_id)
+        logger.info("定时广告已满 50 分钟自动删除成功 | chat_id=%s | message_id=%s", chat_id, message_id)
+    except Exception as e:
+        # 如果消息已经被手动删除了，或者机器人权限不够，这里捕获异常，防止程序报错崩溃
+        logger.warning("定时删除广告失败或已被删除 | chat_id=%s | message_id=%s", chat_id, message_id)
 
 # ============================================================
 # Telegram 菜单及按钮
