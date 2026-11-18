@@ -827,7 +827,7 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
 
     # 1. 检查用户点击的是不是底部固定菜单按钮的文本
     text_to_feature = {
-        "register": ("📝 注册平台", "register.png", (
+        "📝 注册平台": ("📝 注册平台", "register.png", (
         "👑 盛世体育｜新人专属福利 🎉\n"
         "🎁 福利已上线，注册即可参与精彩活动！\n"
         "💰 首存彩金加码\n"
@@ -842,7 +842,7 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
         "🔗 https://jq5555.vip\n\n"
         "注册完成联系管理员领取专区新人红包"
     )),
-        "newbie": ("🎁 新人彩金", "newbie.png", (
+        "🎁 新人彩金": ("🎁 新人彩金", "newbie.png", (
         "👑 盛世体育｜新用户专属福利来袭！🎉\n"
         "🔥 新人豪礼上线，首存彩金惊喜加码！\n"
         "🎁 新人专享 · 双重福利任选\n"
@@ -851,7 +851,7 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
         "⚽️ 足球、篮球、电竞，精彩赛事不断！\n"
         "✨ 新用户专属福利，精彩不容错过！"
     )),
-        "checkin": ("📅 签到彩金", "checkin.png", (
+        "📅 签到彩金": ("📅 签到彩金", "checkin.png", (
         "👑 盛世体育｜每日签到福利 🎉\n"
         "⚽️ 精彩赛事不停歇，每日签到享好礼！\n"
         "🎁 签到奖励 · 惊喜不断\n"
@@ -861,13 +861,13 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
         "💎 连续签到30天，奖励高达 288元\n"
         "✨ 坚持签到，解锁更多专属福利！"
     )),
-        "deposit": ("💰 日存彩金", "deposit.png", (
+        "💰 日存彩金": ("💰 日存彩金", "deposit.png", (
         "🎉 日存福利已开启，天天存，天天领！\n"
         "每日充值即可享受专属福利，金额越高，惊喜越多！\n"
         "安全可靠，到账迅速，福利天天都有，精彩赛事不断！\n"
         "选择盛世体育，让每一笔存款都更有价值！"
     )),
-        "invite": ("👥 推荐好礼", "invite.png", (
+        "👥 推荐好礼": ("👥 推荐好礼", "invite.png", (
         "👑 盛世体育｜邀请好友专属福利 🎉\n"
         "🎁 好友同行，双重福利二选一！\n"
         "🤝 邀请好友加入，解锁专属推荐奖励！\n"
@@ -877,7 +877,7 @@ async def handle_private_message(update: Update, context: ContextTypes.DEFAULT_T
         "🛡 专属包赔 · 福利加码\n"
         "🎯 包赔福利最高可达1200元！"
     )),
-        "explore": ("🗺 探索秘境", "explore.png", (
+        "🗺 探索秘境": ("🗺 探索秘境", "explore.png", (
         "👑 盛世体育｜神秘福利即将开启！🎉\n"
         "🔒 福利秘境暂未开放，敬请期待！\n"
         "🎁 神秘惊喜正在筹备中\n"
