@@ -381,7 +381,7 @@ MAIN_REPLY_MARKUP = ReplyKeyboardMarkup(
 )
 
 def get_inline_keyboard():
-    bot_username = "Flyoo6bot" 
+    bot_username = "sheng0181bot" 
     return InlineKeyboardMarkup([
         [
             InlineKeyboardButton("📝 注册平台", url=f"https://t.me/{bot_username}?start=register"),
@@ -738,7 +738,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data in button_mapping:
         name, img, text = button_mapping[data]
         await notify_customer_action(context, user, name)
-        bot_username = "Flyoo6bot"
+        bot_username = "sheng0181bot"
         
         try:
             image_path = os.path.join(BASE_DIR, img)
