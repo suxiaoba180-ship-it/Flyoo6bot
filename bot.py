@@ -571,7 +571,7 @@ if chat.type == "private":
         "⚽️ 热门赛事不断，更多精彩值得期待！"
     )),
     }
-    if param in button_mapping:
+if param in button_mapping:
             name, img, text = button_mapping[param]
             await notify_customer_action(context, user, name)
             await send_feature_content(update, img, text)
