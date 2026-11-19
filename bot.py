@@ -506,9 +506,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     args = context.args  
 
-    if chat.type == "private" and args:
-        param = args[0]
-        button_mapping = {
+if chat.type == "private":
+    message = update.effective_message
+    command = ""
+    if message and message.text:
+        command = message.text.split()[0].split("@")[0].lstrip("/")
+    param = args[0] if args else command
+    button_mapping = {
         "register": ("📝 注册平台", "register.png", (
         "👑 盛世体育｜新人专属福利 🎉\n"
         "🎁 福利已上线，注册即可参与精彩活动！\n"
